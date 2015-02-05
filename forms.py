@@ -2,8 +2,8 @@ from django import forms
 from django.conf import settings
 from django.utils.translation import ungettext_lazy
 
-from caxiam.common import merge_dicts
-from caxiam.forms import CrispyMixin
+from sculpt.common import merge_dicts
+from sculpt.forms import CrispyMixin
 
 import importlib
 
@@ -12,7 +12,7 @@ import importlib
 #
 
 # collect up all the error messages from configured modules
-# and make them available
+# and make them available for easy import
 #
 def collect_error_messages():
     error_messages = {}

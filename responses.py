@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from django.template.loader import get_template, render_to_string
 from django.utils.encoding import force_text
 from sculpt.json_tools import to_json
+import copy
 import json
 
 #
@@ -50,8 +51,8 @@ class AjaxMixedResponse(JsonResponse):
             if isinstance(toast_list, dict):
                 toast_list = [ toat_list ]      # a single dict is permitted, wrap as list
             for toast in toast_list:
-                if 'duration' not in toast or 'class_name' not in toast or 'message' not in toast:
-                    raise Exception('AJAX toast response requested but a toast is missing required duration, class_name, or message values')
+                if 'duration' not in toast or or 'message' not in toast:
+                    raise Exception('AJAX toast response requested but a toast is missing required duration or message values')
                     
             kwargs['toast'] = to_json(toast_list)
             
@@ -87,11 +88,13 @@ class AjaxMixedResponse(JsonResponse):
     # this expects a response_data dict with the
     # following keys (all optional):
     #
-    #   toast_template_name a toast response
-    #   toast_duration      how long to leave the toast up
-    #   modal_template_name a modal response
-    #   modal_title_template_name   modal's title template
-    #   modal_title         bare string for modal title (not template)
+    #   modal               a dict:
+    #       template_name a modal response
+    #       title_template_name   modal's title template (optional)
+    #       title           bare string for modal title (not template) (optional)
+    #   toast               a dict or list of dicts:
+    #       template_name   a toast response
+    #       duration        how long to leave the toast up
     #   updates             a list:
     #       html_id         the HTML ID to be updated
     #       template_name   the template to render
@@ -109,13 +112,13 @@ class AjaxMixedResponse(JsonResponse):
         response = {}
 
         # do a modal
-        if show_modal and 'modal_template_name' in response_data:
-            modal_template = get_template(response_data['modal_template_name'])
+        if show_modal and 'modal' in response_data:
+            modal_template = get_template(response_data['modal']['template_name'])
             modaL_html = modal_template.render(context)
-            if 'modal_title' in response_data:
-                modal_title = response_data['modal_title']
+            if 'title' in response_data['modal']:
+                modal_title = response_data['modal']['title']
             else:
-                modal_title_template = get_template(response_data['modal_title_template_name'])
+                modal_title_template = get_template(response_data['modal']['title_template_name'])
                 modal_title = modal_title_template.render(context)
             response['modal'] = {
                     'code': None,
@@ -124,26 +127,44 @@ class AjaxMixedResponse(JsonResponse):
                 }
 
         # do toast
-        if show_toast and 'toast_template_name' in response_data:
-            toast_template = get_template(response_data['toast_template_name'])
+        if show_toast and 'toast' in response_data:
+            toast_template = get_template(response_data['toast']['template_name'])
             toast_html = toast_template.render(context)
             response['toast'] = {
-                    'duration': response_data.get('toast_duration', settings.SCULPT_DEFAULT_TOAST_DURATION),
-                    'html': toast_html,
+                    'duration': response_data['toast'].get('duration', settings.SCULPT_DEFAULT_TOAST_DURATION),
+                    'message': toast_html,
                 }
 
         # do HTML updates
-        # the actual rendering piece is in AjaxView,
-        # at least for now; it really should be
-        # extracted and put somewhere more sensible
-        from sculpt.ajax.views import AjaxView
-        
         if show_updates and 'updates' in response_data:
-            response['html'] = AjaxView.render_html_templates(context, response_data['updates'])
+            response['html'] = cls.render_html_templates(context, response_data['updates'])
             
         # now create the response based on what we have
         return AjaxMixedResponse(**response)
         
+    # In many AJAX requests you will need to render a set of
+    # HTML fragments and return them as an AJAX HTML update
+    # response. The IDs and template names need to come from
+    # the urls.py but configuring individual variable names
+    # for each one gets tiresome. This takes a list of
+    # dicts describing an update, renders them, and returns
+    # them as a list of {'id':id,'html':rendered_template}
+    # items suitable for passing to the AjaxHTMLResponse
+    # constructor. The dicts are the same format as the
+    # returned data, except 'template_name' is given instead
+    # of 'html'.
+    #
+    @classmethod
+    def render_html_templates(cls, context, updates):
+        rendered_html = copy.deepcopy(updates)
+        for i in range(len(rendered_html)):
+            # render the update                
+            template_name = rendered_html[i].pop('template_name')   # removes it from the dict so it won't go client-side
+            template = get_template(template_name)
+            rendered_html[i]['html'] = template.render(context)
+
+        return rendered_html
+
 # AJAX success response
 #
 class AjaxSuccessResponse(AjaxMixedResponse):
