@@ -4,7 +4,6 @@ from django.utils.translation import ungettext_lazy
 
 from sculpt.common import merge_dicts, Enumeration
 
-from crispy_forms.helper import FormHelper
 import importlib
 
 #
@@ -28,6 +27,9 @@ error_messages = collect_error_messages()
 class CrispyMixin(object):
 
     def __init__(self, *args, **kwargs):
+        # import here, so entire module can run without django-crispy-forms
+        from crispy_forms.helper import FormHelper
+
         super(CrispyMixin, self).__init__(*args,**kwargs)
         self.helper = FormHelper(self)
         self.helper.form_id = self.__class__.__name__
