@@ -2,9 +2,9 @@ from django import forms
 from django.conf import settings
 from django.utils.translation import ungettext_lazy
 
-from sculpt.common import merge_dicts
-from sculpt.forms import CrispyMixin
+from sculpt.common import merge_dicts, Enumeration
 
+from crispy_forms.helper import FormHelper
 import importlib
 
 #
@@ -16,12 +16,26 @@ import importlib
 #
 def collect_error_messages():
     error_messages = {}
-    for module_name in settings.CAXIAM_AJAX_FORM_ERROR_MESSAGES:
+    for module_name in settings.SCULPT_AJAX_FORM_ERROR_MESSAGES:
         m = importlib.import_module(module_name)
         merge_dicts(error_messages, m.error_messages)
     return error_messages
 
 error_messages = collect_error_messages()
+
+# CrispyForms mixin boilerplate
+#
+class CrispyMixin(object):
+
+    def __init__(self, *args, **kwargs):
+        super(CrispyMixin, self).__init__(*args,**kwargs)
+        self.helper = FormHelper(self)
+        self.helper.form_id = self.__class__.__name__
+        self.setup_form_helper(helper = self.helper)
+
+    def setup_form_helper(self, helper):
+        pass
+
 
 # form mixin class that provides enhanced validation with two
 # major new features:

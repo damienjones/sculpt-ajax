@@ -4,7 +4,7 @@ from sculpt.ajax import ajax_test
 
 # include these in your project for testing by adding
 # this to your urlpatterns:
-#    url(r'ajax/', include('caxiam.ajax.test_urls')),
+#    url(r'ajax/', include('sculpt.ajax.test_urls')),
 
 urlpatterns = patterns(
     url(r'^success/', ajax_test.ajax_test_success.as_view()),

@@ -1,6 +1,8 @@
 from django import forms
 from django.shortcuts import render
-from caxiam.ajax import AjaxView, AjaxFormView, AjaxForm, AjaxFormErrorResponse, AjaxRedirectResponse, AjaxErrorResponse, AjaxSuccessResponse
+from sculpt.ajax.forms import AjaxForm
+from sculpt.ajax.responses import AjaxFormErrorResponse, AjaxRedirectResponse, AjaxErrorResponse, AjaxSuccessResponse
+from sculpt.ajax.views import AjaxView, AjaxFormView
 import time
 
 class ajax_test_success(AjaxView):

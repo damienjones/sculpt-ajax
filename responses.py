@@ -51,7 +51,7 @@ class AjaxMixedResponse(JsonResponse):
             if isinstance(toast_list, dict):
                 toast_list = [ toat_list ]      # a single dict is permitted, wrap as list
             for toast in toast_list:
-                if 'duration' not in toast or or 'message' not in toast:
+                if 'duration' not in toast or 'message' not in toast:
                     raise Exception('AJAX toast response requested but a toast is missing required duration or message values')
                     
             kwargs['toast'] = to_json(toast_list)
@@ -166,11 +166,20 @@ class AjaxMixedResponse(JsonResponse):
         return rendered_html
 
 # AJAX success response
+# for when you need success, but it's a no-op client side
+# NOTE: this might be bad UX, consider toast!
 #
 class AjaxSuccessResponse(AjaxMixedResponse):
 
     def __init__(self, response):
-        super(AjaxSuccessResponse, self).__init__({ 'results' : response })
+        super(AjaxSuccessResponse, self).__init__({ 'results' : {} })
+
+# AJAX data response
+#
+class AjaxDataResponse(AjaxMixedResponse):
+
+    def __init__(self, response):
+        super(AjaxDataResponse, self).__init__({ 'results' : response })
 
 # AJAX HTML update response
 #
