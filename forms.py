@@ -499,6 +499,8 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
 
     # add an error to a specific field, without having to
     # raise a ValidationError
+    # Django 1.7 has something similar but it still doesn't
+    # deal with replacing error messages all that well
     def add_error_message(self, field_name, code, params = None, assign_to_field = None):
         # get the field object itself, if we can
         if field_name == '__all__' or field_name == None:

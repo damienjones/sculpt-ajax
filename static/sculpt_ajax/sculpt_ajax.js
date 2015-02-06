@@ -1403,7 +1403,7 @@ var Sculpt = (function ($, undefined) {
 			this._wrap_forms();
 			this._wrap_links();
 			this._init_toast();
-			this._init_chosen(document);
+			//this._init_chosen(document);
 			this._init_live_update();
 		}
 
