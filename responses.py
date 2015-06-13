@@ -172,35 +172,35 @@ class AjaxMixedResponse(JsonResponse):
 class AjaxSuccessResponse(AjaxMixedResponse):
 
     def __init__(self, response):
-        super(AjaxSuccessResponse, self).__init__({ 'results' : {} })
+        super(AjaxSuccessResponse, self).__init__(results = {})
 
 # AJAX data response
 #
 class AjaxDataResponse(AjaxMixedResponse):
 
     def __init__(self, response):
-        super(AjaxDataResponse, self).__init__({ 'results' : response })
+        super(AjaxDataResponse, self).__init__(results = response)
 
 # AJAX HTML update response
 #
 class AjaxHTMLResponse(AjaxMixedResponse):
 
     def __init__(self, response):
-        super(AjaxHTMLResponse, self).__init__({ 'html' : response })
+        super(AjaxHTMLResponse, self).__init__(html = response)
 
 # AJAX toast response
 #
 class AjaxToastResponse(AjaxMixedResponse):
 
     def __init__(self, response, **kwargs):
-        super(AjaxToastResponse, self).__init__({ 'toast' : response })
+        super(AjaxToastResponse, self).__init__(toast = response)
 
 # AJAX modal response
 #
 class AjaxModalResponse(AjaxMixedResponse):
 
     def __init__(self, response = None, **kwargs):
-        super(AjaxModalResponse, self).__init__({ 'modal' : response })
+        super(AjaxModalResponse, self).__init__(modal = response)
 
 #
 # error-ish responses
