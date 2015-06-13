@@ -542,10 +542,19 @@
 					obj.append(update_item.html);
 				else if (update_item.mode == 'prepend')
 					obj.prepend(update_item.html);
+				else if (update_item.mode == 'replace')
+					obj.replaceWith(update_item.html);
+				else if (update_item.mode == 'remove')
+				{
+					obj.remove();
+					return;				// no class updates on removed object
+				}
 				else
 					obj.html(update_item.html);
 
 				// add/remove classes, if requested
+				// NOTE: you may find replace mode more
+				// effective than manipulating classes
 				if (update_item.class_add != undefined)
 					obj.addClass(update_item.class_add);
 				if (update_item.class_remove != undefined)
