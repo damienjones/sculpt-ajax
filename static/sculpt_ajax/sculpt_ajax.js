@@ -1,6 +1,11 @@
 // Code Sculpture AJAX handler
+//
+// Generally speaking, this relies on both jQuery and
+// Bootstrap for its modals and tooltips. If you're not
+// using Bootstrap, anything that supplies equivalent
+// invocations (e.g. sculpt-transient) will work, too.
 
-var Sculpt = (function ($, undefined) {
+;var Sculpt = (function ($, undefined) {
 	return {
 		// for initialization, see the BOTTOM of this class
 

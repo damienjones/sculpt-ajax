@@ -17,17 +17,16 @@ from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxMod
 # NOTE: this derives from View, not TemplateView, because the
 # default implementation for GET handling MUST be to return
 # an HTTP 405 (method not supported) rather than by default
-# rendering a page. This is suitable for a request which returns
-# data or HTML. For a form, which renders HTML on GET and JSON
+# rendering a page. If we derived from TemplateView, the GET
+# method would be handled automatically, but would raise a
+# different exception when invoked that would return a 500
+# Server Error response instead of 405. This class is suitable
+# for a request which returns any of our standard AJAX
+# responses only. For a form, which renders HTML on GET and JSON
 # results on POST, please use AjaxFormView instead.
 #
 #class AjaxView(AjaxLoginRequiredMixin, View):
 class AjaxView(View):
-
-    # This was added so that your entire view would have access
-    # to the kwargs and args, even if they aren't passed to the function
-    request_kwargs = None
-    request_args = None
 
     # by default, we do not implement GET
     
@@ -49,9 +48,6 @@ class AjaxView(View):
     # do the wrapping here, in dispatch.
     def dispatch(self, request, *args, **kwargs):
 
-        self.request_kwargs = kwargs
-        self.request_args = args
-
         # non-POST requests are not wrapped; you're on your own
         # for error handling as we assume a GET request is for the
         # form HTML
@@ -63,16 +59,17 @@ class AjaxView(View):
         try:
             # spew some debug data, perhaps
             if settings.SCULPT_DUMP_AJAX:
+                raw_uri = request.META['RAW_URI'] if 'RAW_URI' in request.META else request.META['PATH_INFO']
                 if request.META.get('CONTENT_TYPE') == 'multipart/form-data':
                     # Django has already parsed the body and dumping a
                     # full uploaded file's data will not be helpful
-                    print 'AJAX request:', request.META['RAW_URI'], 'MULTIPART: <file upload> +', request.POST
+                    print 'AJAX request:', raw_uri, 'MULTIPART: <file upload> +', request.POST
                 else:
                     # we'd like to print the raw request if we can
                     if hasattr(request, '_body'):
-                        print 'AJAX request:', request.META['RAW_URI'], 'BODY:', request._body
+                        print 'AJAX request:', raw_uri, 'BODY:', request._body
                     else:
-                        print 'AJAX request:', request.META['RAW_URI'], 'POST', request.POST
+                        print 'AJAX request:', raw_uri, 'POST', request.POST
 
             # call the actual POST handler
             results = super(AjaxView, self).dispatch(request, *args, **kwargs)
@@ -158,24 +155,45 @@ class AjaxResponseView(AjaxView):
     updates = None
 
     # shared setup based on request parameters;
-    # if you need to validate IDs in the URL and fetch
+    #
+    # If you need to validate IDs in the URL and fetch
     # records for both GET and POST, this is the place
-    # to do that
+    # to do that. This is NOT the same as the __init__
+    # method. Django creates a new View object with
+    # each request, and the __init__ method receives
+    # all the parameters from the urls.py .as_view()
+    # call. This method received the additional
+    # parameters from URL keyword-matching and from
+    # the extra parameters dict in the urls.py url()
+    # invocation. (The latter should be considered
+    # deprecated now that parameters can be passed to
+    # the View constructor, as the view function from
+    # the .as_view() invocation validates parameters,
+    # and the extra-parameters dict does not.)
+    #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user
-    def prepare_request(self, request, *args, **kwargs):
+    #
+    def prepare_request(self, *args, **kwargs):
         pass
 
     # prep the context
+    #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user
-    def prepare_context(self, request, context):
+    # NOTE: this serves a similar purpose to Django's
+    # TemplateView.get_context_data(), but this does
+    # not derive from TemplateView so it's not available.
+    #
+    def prepare_context(self, context):
         pass
 
-    # shortcut to render to string using the defined template
-    def prepare_response(self, request, context = None):
+    # shortcut to render to string using the defined templates
+    # for modal, toast, and updates, and return the correct
+    # AJAX response
+    def prepare_response(self, context = None):
         if context == None:
             context = {}
 
@@ -194,21 +212,21 @@ class AjaxResponseView(AjaxView):
     def post(self, request, *args, **kwargs):
 
         # do request setup
-        rv = self.prepare_request(request, *args, **kwargs)
+        rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, JsonResponse):
             return rv
 
         # set up context
         context = {}
         initial = {}
-        rv = self.prepare_context(request, context)
+        rv = self.prepare_context(context)
         if isinstance(rv, JsonResponse):
             return rv
 
         # render to AJAX response; if this returns anything
         # other than a JsonResponse, the base class code
         # will complain
-        return self.prepare_response(request, context)
+        return self.prepare_response(context)
 
 # an AJAX form view class
 #
@@ -264,18 +282,10 @@ class AjaxFormView(AjaxResponseView):
     # override these to provide custom handling for your form
     #
 
-    # shared setup based on request parameters;
-    # if you need to validate IDs in the URL and fetch
-    # records for both GET and POST, this is the place
-    # to do that
-    #
-    # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
-    # will stop and that response sent back to the user
-    #
+    # shared setup based on request parameters
     # (inherited from AjaxResponseView)
     #
-    #def prepare_request(self, request, *args, **kwargs):
+    #def prepare_request(self, *args, **kwargs):
     #    pass
 
     # prep the context and initial form data
@@ -290,13 +300,13 @@ class AjaxFormView(AjaxResponseView):
     # any modal/toast/updates rendering
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user
     #
     # NOTE: this is NOT inherited from AjaxResponseView
-    # as its call signature differs
+    # as its call signature differs (includes initial)
     #
-    def prepare_context(self, request, context, initial):
+    def prepare_context(self, context, initial):
         pass
 
     # after the form object has been created, it may
@@ -304,10 +314,10 @@ class AjaxFormView(AjaxResponseView):
     # validated; do that here
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user
     #
-    def prepare_form(self, request, form):
+    def prepare_form(self, form):
         pass
 
     # when a form has been successfully validated, do
@@ -316,19 +326,19 @@ class AjaxFormView(AjaxResponseView):
     # data or at least update target_url
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user;
     # you may also return a string to indicate a
     # different target URL than the default
     #
-    def process_form(self, request, form):
+    def process_form(self, form):
         pass
     
     # when a form is being partially validated you may
     # want to do something (and usually this is very
     # different from what you do with a fully-valid form)
     #
-    def process_partial_form(self, request, form):
+    def process_partial_form(self, form):
         pass
     
     #
@@ -340,14 +350,14 @@ class AjaxFormView(AjaxResponseView):
     def get(self, request, *args, **kwargs):
 
         # do GET/POST combined setup
-        rv = self.prepare_request(request, *args, **kwargs)
+        rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, (HttpResponse)):
             return rv
         
         # set up context and initial form data
         context = {}
         initial = {}
-        rv = self.prepare_context(request, context, initial)
+        rv = self.prepare_context(context, initial)
         if isinstance(rv, (HttpResponse)):
             return rv
 
@@ -360,7 +370,7 @@ class AjaxFormView(AjaxResponseView):
         for k in self.helper_attrs:
             setattr(form.helper, k, self.helper_attrs[k])
 
-        rv = self.prepare_form(request, form)
+        rv = self.prepare_form(form)
         if isinstance(rv, (HttpResponse)):
             return rv
         
@@ -383,7 +393,7 @@ class AjaxFormView(AjaxResponseView):
             self._partial_validation_last_field = request.GET['_partial']
         
         # do GET/POST combined setup
-        rv = self.prepare_request(request, *args, **kwargs)
+        rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, JsonResponse):
             return rv
         
@@ -393,7 +403,7 @@ class AjaxFormView(AjaxResponseView):
             form = self.form_class(request.POST, request.FILES, **self.form_attrs)
         else:
             form = self.form_class(request.POST, **self.form_attrs)
-        rv = self.prepare_form(request, form)
+        rv = self.prepare_form(form)
         if isinstance(rv, JsonResponse):
             return rv
         
@@ -402,7 +412,7 @@ class AjaxFormView(AjaxResponseView):
             is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)
             
             # call any processing needed for this partial form
-            rv = self.process_partial_form(request, form)
+            rv = self.process_partial_form(form)
             if isinstance(rv, JsonResponse):
                 return rv
             
@@ -420,18 +430,18 @@ class AjaxFormView(AjaxResponseView):
             
         # a valid form will usually require something to
         # be done with its data
-        rv = self.process_form(request, form)
+        rv = self.process_form(form)
 
         if (rv is None):
             # no JsonResponse, no target_url string...
             # fall back to AjaxResponseView-style
             context = {}
             initial = {}
-            rv = self.prepare_context(request, context, initial)
+            rv = self.prepare_context(context, initial)
             if isinstance(rv, (HttpResponse)):
                 # in case the context-creating needs to bail
                 return rv
-            rv = self.prepare_response(request, context)
+            rv = self.prepare_response(context)
 
         if isinstance(rv, JsonResponse):
             # we now have a valid JSON response; stop
@@ -535,16 +545,15 @@ class AjaxMultiFormView(AjaxView):
     # override these to provide custom handling for your form
     #
 
-    # shared setup based on request parameters;
-    # if you need to validate IDs in the URL and fetch
-    # records for both GET and POST, this is the place
-    # to do that
+    # shared setup based on request parameters
+    # (similar to AjaxResponseView, but we don't inherit
+    # from that)
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user
     #
-    def prepare_request(self, request, *args, **kwargs):
+    def prepare_request(self, *args, **kwargs):
         pass
 
     # prep the context and initial form data
@@ -563,14 +572,14 @@ class AjaxMultiFormView(AjaxView):
     # will not render HTML
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user,
     # aborting all other form processing
     #
-    def prepare_context(self, request, context, initial, form_alias):
+    def prepare_context(self, context, initial, form_alias):
         method_name = 'prepare_context_%s' % form_alias
         if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(request, context, initial)
+            return getattr(self, method_name)(context, initial)
 
     # after the form object has been created, it may
     # need to be modified before being rendered or
@@ -582,14 +591,14 @@ class AjaxMultiFormView(AjaxView):
     # NOTE: this is called once per form alias
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user,
     # aborting all other form processing
     #
-    def prepare_form(self, request, form, form_alias):
+    def prepare_form(self, form, form_alias):
         method_name = 'prepare_form_%s' % form_alias
         if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(request, form)
+            return getattr(self, method_name)(form)
 
     # when a form has been successfully validated, do
     # something with the data; this is the most important
@@ -600,15 +609,15 @@ class AjaxMultiFormView(AjaxView):
     # but provide process_form_<alias> instead
     #
     # NOTE: a normal return value should be None, but
-    # if you return an JsonResponse type, processing
+    # if you return a JsonResponse type, processing
     # will stop and that response sent back to the user;
     # you may also return a string to indicate a
     # different target URL than the default
     #
-    def process_form(self, request, form, form_alias):
+    def process_form(self, form, form_alias):
         method_name = 'process_form_%s' % form_alias
         if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(request, form)
+            return getattr(self, method_name)(form)
     
     # similarly, if you want to process partial form
     # data, provide a process_partial_form_<alias>
@@ -617,10 +626,10 @@ class AjaxMultiFormView(AjaxView):
     #
     # the notes on process_form apply to this as well
     #
-    def process_partial_form(self, request, form, form_alias):
+    def process_partial_form(self, form, form_alias):
         method_name = 'process_partial_form_%s' % form_alias
         if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(request, form)
+            return getattr(self, method_name)(form)
     
     #
     # boilerplate, so you don't have to keep writing it
@@ -631,7 +640,7 @@ class AjaxMultiFormView(AjaxView):
     def get(self, request, *args, **kwargs):
 
         # do GET/POST combined setup
-        rv = self.prepare_request(request, *args, **kwargs)
+        rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, JsonResponse):
             return rv
         
@@ -641,7 +650,7 @@ class AjaxMultiFormView(AjaxView):
         for form_alias,form_data in self.form_classes.iteritems():
             form_class, helper_attrs, target_url = form_data
             initials[form_alias] = { 'form_alias': form_alias }
-            rv = self.prepare_context(request, context, initials[form_alias], form_alias)
+            rv = self.prepare_context(context, initials[form_alias], form_alias)
             if isinstance(rv, JsonResponse):
                 return rv
 
@@ -664,7 +673,7 @@ class AjaxMultiFormView(AjaxView):
             for k in helper_attrs:
                 setattr(form.helper, k, helper_attrs[k])
 
-            rv = self.prepare_form(request, form, form_alias)
+            rv = self.prepare_form(form, form_alias)
             if isinstance(rv, JsonResponse):
                 return rv
         
@@ -687,7 +696,7 @@ class AjaxMultiFormView(AjaxView):
             self._partial_validation_last_field = request.GET['_partial']
         
         # do GET/POST combined setup
-        rv = self.prepare_request(request, *args, **kwargs)
+        rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, JsonResponse):
             return rv
         
@@ -725,7 +734,7 @@ class AjaxMultiFormView(AjaxView):
 
         # create the form based on the submitted data
         form = form_class(request.POST, **form_attrs)
-        rv = self.prepare_form(request, form, form_alias)
+        rv = self.prepare_form(form, form_alias)
         if isinstance(rv, JsonResponse):
             return rv
         
@@ -734,7 +743,7 @@ class AjaxMultiFormView(AjaxView):
             is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)
             
             # call any processing needed for this partial form
-            rv = self.process_partial_form(request, form, form_alias)
+            rv = self.process_partial_form(form, form_alias)
             if isinstance(rv, JsonResponse):
                 return rv
             
@@ -752,7 +761,7 @@ class AjaxMultiFormView(AjaxView):
             
         # a valid form will usually require something to
         # be done with its data
-        rv = self.process_form(request, form, form_alias)
+        rv = self.process_form(form, form_alias)
         
         #**** MAKE LIKE AjaxFormView AND FALL BACK TO AjaxResponseView
         if isinstance(rv, JsonResponse):
