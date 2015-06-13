@@ -5,7 +5,7 @@ from django.template import RequestContext
 from django.template.loader import get_template, render_to_string
 from django.views.generic import View
 
-from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
+from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxMixedResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
 #from sculpt.view_mixins import AjaxLoginRequiredMixin
 
 #
@@ -431,8 +431,11 @@ class AjaxFormView(AjaxResponseView):
         # a valid form will usually require something to
         # be done with its data
         rv = self.process_form(form)
+        if rv is None:
+            # this means use the default target_url
+            rv = self.target_url
 
-        if (rv is None):
+        if rv is None:
             # no JsonResponse, no target_url string...
             # fall back to AjaxResponseView-style
             context = {}
