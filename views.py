@@ -645,6 +645,18 @@ class AjaxMultiFormView(AjaxView):
     # boilerplate, so you don't have to keep writing it
     #
     
+    # pull out the form configuration data from a form_alias
+    # definition (accepts either tuple or dict)
+    def extract_form_data(self, form_data):
+        if isinstance(form_data, dict):
+            form_class = form_data['form_class']    # required
+            helper_attrs = form_data.get('helper_attrs')
+            target_url = form_data.get('target_url')
+            form_attrs = form_data.get('form_attrs', {})
+            return (form_class, helper_attrs, target_url, form_attrs)
+        else:
+            return form_data
+
     # basic GET handler: set up the form and
     # context and render the view
     def get(self, request, *args, **kwargs):
@@ -658,7 +670,7 @@ class AjaxMultiFormView(AjaxView):
         context = {}
         initials = {}
         for form_alias,form_data in self.form_classes.iteritems():
-            form_class, helper_attrs, target_url = form_data
+            form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
             initials[form_alias] = { 'form_alias': form_alias }
             rv = self.prepare_context(context, initials[form_alias], form_alias)
             if isinstance(rv, JsonResponse):
@@ -668,12 +680,9 @@ class AjaxMultiFormView(AjaxView):
         # to modify it
         context['forms'] = {}
         for form_alias,form_data in self.form_classes.iteritems():
-            form_class, helper_attrs, target_url = form_data
+            form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
             if helper_attrs == None:
                 helper_attrs = {}
-            form_attrs = {}
-            if len(form_data) > 3:
-                form_attrs = form_data[3]
             if 'prefix' not in form_attrs:
                 form_attrs['prefix'] = form_alias
             form = form_class(initial = initials[form_alias], **form_attrs)
@@ -731,14 +740,11 @@ class AjaxMultiFormView(AjaxView):
             form_alias = request.POST['form_alias']
 
         form_data = self.form_classes[form_alias]
-        form_class, helper_attrs, target_url = form_data
+        form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
         if target_url == None:
             # this form doesn't have a specific target URL;
             # use the class-wide one
             target_url = self.target_url
-        form_attrs = {}
-        if len(form_data) > 3:
-            form_attrs = form_data[3]
         if 'prefix' not in form_attrs:
             form_attrs['prefix'] = form_alias
 
