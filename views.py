@@ -713,6 +713,8 @@ class AjaxMultiFormView(AjaxView):
             # with this view; it's not always an error if
             # the form action is directed elsewhere, but
             # it can be helpful to flag these
+            if form_class is None:
+                raise Exception('form_class cannot be None for form_alias %s' % form_alias)
             if not issubclass(form_class, AjaxFormAliasMixin) and settings.DEBUG:
                 print 'WARNING: %(form_class_name)s is not a sub-class of AjaxFormAliasMixin' % { 'form_class_name': form_class.__name__ }
 
