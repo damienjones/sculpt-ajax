@@ -32,7 +32,7 @@ class CrispyMixin(object):
 
         super(CrispyMixin, self).__init__(*args,**kwargs)
         self.helper = FormHelper(self)
-        self.helper.form_id = self.__class__.__name__
+        self.helper.form_id = 'id_' + (self.prefix if self.prefix else self.__class__.__name__)
         self.setup_form_helper(helper = self.helper)
 
     def setup_form_helper(self, helper):
