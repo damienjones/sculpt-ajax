@@ -663,7 +663,7 @@ class AjaxMultiFormView(AjaxView):
 
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, HttpResponse):
             return rv
         
         # set up context and initial form data
@@ -673,7 +673,7 @@ class AjaxMultiFormView(AjaxView):
             form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
             initials[form_alias] = { 'form_alias': form_alias }
             rv = self.prepare_context(context, initials[form_alias], form_alias)
-            if isinstance(rv, JsonResponse):
+            if isinstance(rv, HttpResponse):
                 return rv
 
         # create form(s) and give the derived class a chance
@@ -693,7 +693,7 @@ class AjaxMultiFormView(AjaxView):
                 setattr(form.helper, k, helper_attrs[k])
 
             rv = self.prepare_form(form, form_alias)
-            if isinstance(rv, JsonResponse):
+            if isinstance(rv, HttpResponse):
                 return rv
         
         # render the template and give back a response
@@ -741,6 +741,7 @@ class AjaxMultiFormView(AjaxView):
 
         form_data = self.form_classes[form_alias]
         form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
+        self.form_data = form_data              # in case handler needs it
         if target_url == None:
             # this form doesn't have a specific target URL;
             # use the class-wide one
