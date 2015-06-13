@@ -98,9 +98,12 @@ error_messages = {
         # NOTE: unlike _global, we prefix items here with
         # the fieldname__ instead of fieldclassname__
         # NOTE: both flavors are checked here before _global
-        'AppAuthenticationForm': {
-            # these are left as form-wide as they are applied to both username and password
-            'inactive': 'This account is inactive and cannot be used.',
-            'invalid_login': 'This username and pasword do not match our records. Note that passwords are case-sensitive.',
-        }
+
+        # here is an example:
+
+        # 'AppAuthenticationForm': {
+        #         # these are left as form-wide as they are applied to both username and password
+        #         'inactive': 'This account is inactive and cannot be used.',
+        #         'invalid_login': 'This username and pasword do not match our records. Note that passwords are case-sensitive.',
+        #     },
     }
