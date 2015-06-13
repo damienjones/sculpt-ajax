@@ -49,9 +49,9 @@ class AjaxMixedResponse(JsonResponse):
         if 'toast' in kwargs:
             toast_list = kwargs['toast']
             if isinstance(toast_list, dict):
-                toast_list = [ toat_list ]      # a single dict is permitted, wrap as list
+                toast_list = [ toast_list ]     # a single dict is permitted, wrap as list
             for toast in toast_list:
-                if 'duration' not in toast or 'message' not in toast:
+                if 'duration' not in toast or 'html' not in toast:
                     raise Exception('AJAX toast response requested but a toast is missing required duration or message values')
                     
             kwargs['toast'] = to_json(toast_list)
@@ -132,7 +132,7 @@ class AjaxMixedResponse(JsonResponse):
             toast_html = toast_template.render(context)
             response['toast'] = {
                     'duration': response_data['toast'].get('duration', settings.SCULPT_DEFAULT_TOAST_DURATION),
-                    'message': toast_html,
+                    'html': toast_html,
                 }
 
         # do HTML updates
