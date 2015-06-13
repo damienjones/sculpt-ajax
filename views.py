@@ -6,7 +6,15 @@ from django.template.loader import get_template, render_to_string
 from django.views.generic import View
 
 from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxMixedResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
-#from sculpt.view_mixins import AjaxLoginRequiredMixin
+
+base_view_class = View
+if settings.SCULPT_AJAX_LOGIN_REQUIRED:
+    from sculpt.model_tools.view_mixins import AjaxLoginRequiredMixin
+
+    class AjaxViewBase(AjaxLoginRequiredMixin, View):
+        pass
+
+    base_view_class = AjaxViewBase
 
 #
 # views
@@ -25,8 +33,7 @@ from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxMod
 # responses only. For a form, which renders HTML on GET and JSON
 # results on POST, please use AjaxFormView instead.
 #
-#class AjaxView(AjaxLoginRequiredMixin, View):
-class AjaxView(View):
+class AjaxView(base_view_class):
 
     # by default, we do not implement GET
     
