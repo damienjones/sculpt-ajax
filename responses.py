@@ -134,6 +134,8 @@ class AjaxMixedResponse(JsonResponse):
                     'duration': response_data['toast'].get('duration', settings.SCULPT_DEFAULT_TOAST_DURATION),
                     'html': toast_html,
                 }
+            if 'class_name' in response_data['toast']:
+                response['toast']['class_name'] = response_data['toast']['class_name']
 
         # do HTML updates
         if show_updates and 'updates' in response_data:
