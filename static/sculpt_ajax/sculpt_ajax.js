@@ -536,7 +536,14 @@
 			{
 				update_item = update_list[i];
 				var obj = $('#'+update_item.id);
-				obj.html(update_item.html);
+				
+				// append, prepend, or replace
+				if (update_item.mode == 'append')
+					obj.append(update_item.html);
+				else if (update_item.mode == 'prepend')
+					obj.prepend(update_item.html);
+				else
+					obj.html(update_item.html);
 
 				// add/remove classes, if requested
 				if (update_item.class_add != undefined)
@@ -1435,4 +1442,4 @@
 		// "is before" what we compared to
 		return this.add(elem).index(elem) > 0;
 	}
-})(jQuery)
+})(jQuery);
