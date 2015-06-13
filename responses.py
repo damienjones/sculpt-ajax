@@ -96,7 +96,7 @@ class AjaxMixedResponse(JsonResponse):
     #       template_name   a toast response
     #       duration        how long to leave the toast up
     #   updates             a list:
-    #       html_id         the HTML ID to be updated
+    #       id              the HTML ID to be updated
     #       template_name   the template to render
     #       class_add       class(es) to add to the html_id object
     #       class_remove    class(es) to remove from the html_id object
@@ -171,7 +171,7 @@ class AjaxMixedResponse(JsonResponse):
 #
 class AjaxSuccessResponse(AjaxMixedResponse):
 
-    def __init__(self, response):
+    def __init__(self):
         super(AjaxSuccessResponse, self).__init__(results = {})
 
 # AJAX data response
