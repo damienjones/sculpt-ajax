@@ -1188,7 +1188,7 @@
 
 			// hide the current toast, but leave the subclass
 			// on it so animations will work
-			this._toast_element.removeClass('active');
+			this._toast_element.removeClass('active').addClass('inactive');
 
 			// if there is still a timeout waiting, kill it
 			if (toast.timer)
