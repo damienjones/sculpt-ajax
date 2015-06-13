@@ -7,6 +7,8 @@ from django.views.generic import View
 
 from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxMixedResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
 
+from collections import OrderedDict
+
 base_view_class = View
 if settings.SCULPT_AJAX_LOGIN_REQUIRED:
     from sculpt.model_tools.view_mixins import AjaxLoginRequiredMixin
@@ -698,7 +700,18 @@ class AjaxMultiFormView(AjaxView):
 
         # create form(s) and give the derived class a chance
         # to modify it
-        context['forms'] = {}
+        #
+        # NOTE: we use an OrderedDict here in case the derived
+        # view class used an OrderedDict to control the order
+        # forms are inserted. Django makes it impossible to
+        # do index lookups by variable within a template, so
+        # we need to be able to pass in a list of actual form
+        # objects; the easiest way is to order the set of forms
+        # we're actually using, if the derived view needs it.
+        # If the source form_classes is not an OrderedDict but
+        # a regular dict, no harm is done.
+        #
+        context['forms'] = OrderedDict()
         for form_alias,form_data in self.form_classes.iteritems():
             self.form_data = form_data              # in case handler needs it
             form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
