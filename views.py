@@ -587,9 +587,14 @@ class AjaxMultiFormView(AjaxView):
     # aborting all other form processing
     #
     def prepare_context(self, context, initial, form_alias):
-        method_name = 'prepare_context_%s' % form_alias
-        if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(context, initial)
+        if form_alias in self.form_classes:
+            method_name = 'prepare_context_%s' % form_alias
+            if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                return getattr(self, method_name)(context, initial)
+            else:
+                method_name = 'prepare_context__default'
+                if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                    return getattr(self, method_name)(context, initial, form_alias)
 
     # after the form object has been created, it may
     # need to be modified before being rendered or
@@ -606,9 +611,14 @@ class AjaxMultiFormView(AjaxView):
     # aborting all other form processing
     #
     def prepare_form(self, form, form_alias):
-        method_name = 'prepare_form_%s' % form_alias
-        if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(form)
+        if form_alias in self.form_classes:
+            method_name = 'prepare_form_%s' % form_alias
+            if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                return getattr(self, method_name)(form)
+            else:
+                method_name = 'prepare_form__default'
+                if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                    return getattr(self, method_name)(form, form_alias)
 
     # when a form has been successfully validated, do
     # something with the data; this is the most important
@@ -625,9 +635,14 @@ class AjaxMultiFormView(AjaxView):
     # different target URL than the default
     #
     def process_form(self, form, form_alias):
-        method_name = 'process_form_%s' % form_alias
-        if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(form)
+        if form_alias in self.form_classes:
+            method_name = 'process_form_%s' % form_alias
+            if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                return getattr(self, method_name)(form)
+            else:
+                method_name = 'process_form__default'
+                if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                    return getattr(self, method_name)(form, form_alias)
     
     # similarly, if you want to process partial form
     # data, provide a process_partial_form_<alias>
@@ -637,9 +652,13 @@ class AjaxMultiFormView(AjaxView):
     # the notes on process_form apply to this as well
     #
     def process_partial_form(self, form, form_alias):
-        method_name = 'process_partial_form_%s' % form_alias
-        if form_alias in self.form_classes and hasattr(self, method_name) and callable(getattr(self, method_name)):
-            return getattr(self, method_name)(form)
+        if form_alias in self.form_classes:
+            if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                return getattr(self, method_name)(form)
+            else:
+                method_name = 'process_partial_form__default'
+                if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                    return getattr(self, method_name)(form, form_alias)
     
     #
     # boilerplate, so you don't have to keep writing it
@@ -670,6 +689,7 @@ class AjaxMultiFormView(AjaxView):
         context = {}
         initials = {}
         for form_alias,form_data in self.form_classes.iteritems():
+            self.form_data = form_data              # in case handler needs it
             form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
             initials[form_alias] = { 'form_alias': form_alias }
             rv = self.prepare_context(context, initials[form_alias], form_alias)
@@ -680,6 +700,7 @@ class AjaxMultiFormView(AjaxView):
         # to modify it
         context['forms'] = {}
         for form_alias,form_data in self.form_classes.iteritems():
+            self.form_data = form_data              # in case handler needs it
             form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
             if helper_attrs == None:
                 helper_attrs = {}
