@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
-from django.template import RequestContext
+from django.template import RequestContext, Context
 from django.template.loader import get_template, render_to_string
 from django.views.generic import View
 
@@ -211,6 +211,9 @@ class AjaxResponseView(AjaxView):
     def prepare_response(self, context = None):
         if context == None:
             context = {}
+        if not isinstance(context, Context):
+            # must have a Context instance to render templates
+            context = RequestContext(self.request, context)
 
         # prepare all-in-one configuration
         response_data = {}
