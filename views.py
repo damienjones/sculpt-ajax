@@ -604,6 +604,13 @@ class AjaxMultiFormView(AjaxView):
                 if hasattr(self, method_name) and callable(getattr(self, method_name)):
                     return getattr(self, method_name)(context, initial, form_alias)
 
+    # and sometimes we need to set some global context
+    # stuff, aside from all the forms, especially when
+    # the list of forms is dynamically generated
+    # NOTE: there's no initial data and no form context
+    def prepare_context__all(self, context):
+        pass
+
     # after the form object has been created, it may
     # need to be modified before being rendered or
     # validated; do that here
@@ -713,6 +720,12 @@ class AjaxMultiFormView(AjaxView):
             rv = self.prepare_context(context, initials[form_alias], form_alias)
             if isinstance(rv, HttpResponse):
                 return rv
+
+        # and the global context prep, after all the
+        # forms are done
+        rv = self.prepare_context__all(context)
+        if isinstance(rv, HttpResponse):
+            return rv
 
         # create form(s) and give the derived class a chance
         # to modify it
