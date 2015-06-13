@@ -559,6 +559,6 @@ class AjaxFormAliasMixin(forms.Form):
             label = "Form Alias",
             required = False,
             max_length = 100,
-            widget = forms.HiddenInput()
+            widget = forms.HiddenInput(),
         )
 

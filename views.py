@@ -5,6 +5,7 @@ from django.template import RequestContext
 from django.template.loader import get_template, render_to_string
 from django.views.generic import View
 
+from sculpt.ajax.forms import AjaxFormAliasMixin
 from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxMixedResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
 
 from collections import OrderedDict
@@ -88,11 +89,16 @@ class AjaxView(base_view_class):
                 # a response in the correct form; if not, we want
                 # to trap those errors early in development rather
                 # than let them skate by
+                #
                 # NOTE: we return this rather than raise it, because
                 # we don't have a backtrace (it's not helpful) and
                 # because it's already formatted as an error response
+                #
                 response = { 'code': 1, 'title': 'Invalid Response Type', 'message': 'Request generated an invalid response type (%s)' % results.__class__.__name__ }
                 if settings.SCULPT_DUMP_AJAX:
+                    print 'AJAX INVALID RESPONSE TYPE'
+                    print 'original response:', results.__class__.__name__
+                    print results
                     print 'AJAX result:', response
                 return AjaxErrorResponse(response)
 
@@ -608,9 +614,10 @@ class AjaxMultiFormView(AjaxView):
     # NOTE: this is called once per form alias
     #
     # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
-    # will stop and that response sent back to the user,
-    # aborting all other form processing
+    # if you return a JsonResponse type (for POST) or
+    # HttpResponse type (for GET), processing will stop
+    # and that response sent back to the user, aborting
+    # all other form processing
     #
     def prepare_form(self, form, form_alias):
         if form_alias in self.form_classes:
@@ -693,6 +700,15 @@ class AjaxMultiFormView(AjaxView):
         for form_alias,form_data in self.form_classes.iteritems():
             self.form_data = form_data              # in case handler needs it
             form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
+            
+            # extra check: sometimes we forget to include
+            # AjaxFormAliasMixin for forms we want to use
+            # with this view; it's not always an error if
+            # the form action is directed elsewhere, but
+            # it can be helpful to flag these
+            if not issubclass(form_class, AjaxFormAliasMixin) and settings.DEBUG:
+                print 'WARNING: %(form_class_name)s is not a sub-class of AjaxFormAliasMixin' % { 'form_class_name': form_class.__name__ }
+
             initials[form_alias] = { 'form_alias': form_alias }
             rv = self.prepare_context(context, initials[form_alias], form_alias)
             if isinstance(rv, HttpResponse):
@@ -770,7 +786,18 @@ class AjaxMultiFormView(AjaxView):
         # fallback position: unprefixed field
         if form_alias == None:
             if 'form_alias' not in request.POST or request.POST['form_alias'] not in self.form_classes:
+                # we're going to reject this request because
+                # we don't know which form it belongs to, but
+                # it's possible this is due to a programming
+                # mistake like not including AjaxFormAliasMixin
+                # in the form's inheritance path, so we want
+                # to be more explicit in calling this out
+                if settings.DEBUG:
+                    print 'AJAX FORM ERROR: no form_alias could be found; did you forget to derive from AjaxFormAliasMixin?'
                 return self.http_method_not_allowed(request, *args, **kwargs)
+
+            # else we know this value is good; use the
+            # unprefixed form_alias
             form_alias = request.POST['form_alias']
 
         form_data = self.form_classes[form_alias]
