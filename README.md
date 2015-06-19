@@ -3,6 +3,13 @@ sculpt-ajax
 
 This library is a set of tools, client-side and server-side, to take some of the grunt work out of integrating AJAX-y behavior into a web site.
 
+Special Note
+------------
+
+This is not a complete project. It's not packaged as a Python project (so you have to drop the source into your own project directly), the directory structure doesn't match the package's expectations of itself, there are no unit tests, and the only documentation is within the code itself. I don't really expect anyone else to use this code... yet. All of those things will be addressed at some point.
+
+That said, the code _is_ being used. This started with work I did while at Caxiam (and I obtained a comprehensive license to continue with the code) so here and there are references to Caxiam that I am slowly replacing. I've done quite a bit of refactoring since then and expect to do more.
+
 Rationale
 ---------
 
