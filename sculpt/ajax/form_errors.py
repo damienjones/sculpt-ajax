@@ -13,9 +13,9 @@
 # language; be clear and direct without being insulting or snide.
 # Each error message should include __fieldname__ as the
 # placeholder for the field name; this won't be replaced by Django,
-# but rather by our own code on the client side. Some error messages
+# but rather by client-side JavaScript code. Some error messages
 # may have other placeholders that are filled in with data from the
-# validator.
+# validator on the server side.
 #
 # Some messages are given as a tuple instead of as a single string.
 # These are handed off to ungettext_lazy once the value is known

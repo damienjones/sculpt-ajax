@@ -89,7 +89,7 @@
 #    (location, exception, error, form_error) will be present.
 #    For success-ish responses, at least one (but possibly more)
 #    of the top-level keys is required. For details, see the
-#    client-side code in caxiam.js.
+#    client-side code in sculpt_ajax.js.
 #
 #    NOTE: ALL formatted responses are returned with HTTP status
 #    200 (OK), including errors. Other errors will be interpreted

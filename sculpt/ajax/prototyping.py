@@ -1,12 +1,13 @@
 from django.shortcuts import render
 from sculpt.ajax.responses import AjaxSuccessResponse, AjaxErrorResponse
 from sculpt.ajax.views import AjaxView, AjaxFormView
-from sculpt.email import send_mail
 
 # a simple email-the-form view
 #
 # this is primarily useful during prototyping, to accept
 # form data and send it via email somewhere
+#
+# NOTE: this depends on sculpt-email being available.
 #
 class AjaxEmailFormView(AjaxFormView):
 
@@ -18,24 +19,20 @@ class AjaxEmailFormView(AjaxFormView):
 
     # process the form by sending an email
     def process_form(self, request, form):
+        from sculpt.email import send_mail
         send_mail(self.email_template_name, self.email_brand, getattr(settings, self.email_address_setting), self.email_from, form.cleaned_data)
 
-# This is used for Blake's prototyping.  This allows him to make complete
-# prototypes with (semi) working ajax.  He can completely write ALL of the
-# front end and submit the ajax to a real url that would give him data back
-# NOTE: THIS DOES NOT EMPOWER BLAKE TO BE THE END ALL BE ALL FOR DATA DESIGN
-# NOTE: IF IN THE FUTURE, THE JSON STRUCTURE HAS CHANGED, THEN EITHER THE DEV
-#    OR THE FRONT END DEV HAS TO MAKE THE CHANGES TO THE JS.
+# a simple prototyping view that responds to GET
+# requests by rendering an HTML template and POST
+# requests by rendering a JSON template.
+#
 class AjaxPrototypeView(AjaxView):
-    # these attributes must be present (but unfilled) or the
-    # as_view method will not allow them to be set
+
+    # HTML template name
     template_name = None
 
-    # Blake needs to be able to add a pointer to a file filled
-    # with preformatted json data.  This controller is used
-    # specifically for prototyping for use without the intervention
-    # of a Python Developer
-    json_file_name = None
+    # JSON template name
+    json_template_name = None
     
     # basic GET handler
     def get(self, request, *args, **kwargs):
@@ -45,9 +42,9 @@ class AjaxPrototypeView(AjaxView):
     # basic POST handler: Loads the JSON and outputs the json
     def post(self, request, *args, **kwargs):
         try:
-            json_data = json.loads(render_to_string(self.json_file_name,{}))
-            # default handling is to go to the target URL
+            json_data = json.loads(render_to_string(self.json_template_name,{}))
             return AjaxSuccessResponse(json_data)
+
         except Exception as e:
             message = "There was an error with the data: " + str(e.args)
-            return AjaxErrorResponse({'title':"Error", 'message':message, 'code': 1})
+            return AjaxErrorResponse({'title': "Error", 'message': message, 'code': 1})
