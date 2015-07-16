@@ -722,12 +722,12 @@
 				// be validated, we can live with the potential for
 				// inconsistency (for now)
 				//
-				var last_field = $(form).data('data-last-field');
+				var last_field = $(form).data('lastField');
 				if (last_field == undefined)
 				{
 					// we never recorded one on this form; use the focus
 					// field
-					$(form).data('data-last-field', ff);
+					$(form).data('lastField', ff);
 					last_field = ff;
 				}
 				else
@@ -738,7 +738,7 @@
 					{
 						// this new field is farther into the form
 						// than the previous last field
-						$(form).data('data-last-field', ff);
+						$(form).data('lastField', ff);
 						last_field = ff;
 					}
 				}
