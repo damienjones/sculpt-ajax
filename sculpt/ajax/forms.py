@@ -354,8 +354,8 @@ class FF(object):
 # shown on the form.
 #
 # NOTE: we automatically include CrispyMixin to set up a form
-# helper object without requiring extra steps. See
-# sculpt.ajax.forms.CrispyMixin for more details.
+# helper object without requiring extra steps. See CrispyMixin
+# for more details.
 #
 class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
 

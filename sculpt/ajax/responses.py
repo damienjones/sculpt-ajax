@@ -68,6 +68,9 @@ class AjaxMixedResponse(JsonResponse):
         # data, as we assume this is done by the calling
         # code in order to control object serialization
 
+        # this value is a marker to the client-side code
+        # that indicates it adheres to the correct JSON
+        # response format
         kwargs['sculpt'] = 'ajax'
 
         super(AjaxMixedResponse, self).__init__(kwargs)
@@ -103,9 +106,14 @@ class AjaxMixedResponse(JsonResponse):
     #
     # if a modal is returned, its code will be null
     #
-    # as a convenience, you can disable the modal or
+    # As a convenience, you can disable the modal or
     # toast with an additional flag so you don't have
-    # to clobber the response configuration
+    # to clobber the response configuration in special
+    # circumstances; this is especially important since
+    # Django creates a view object for each request
+    # but the config data would be shared among all
+    # instances, so modifying them on the fly would
+    # require deep-copying them first.
     #
     @classmethod
     def create(cls, context, response_data, show_modal = True, show_toast = True, show_updates = True):
