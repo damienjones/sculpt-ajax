@@ -1,0 +1,7 @@
+{% load crispy_forms_field %}
+<ul {% if ul.css_id %}id="{{ ul.css_id }}"{% endif %}
+    {% if ul.css_class %}class="{{ ul.css_class }}"{% endif %} {{ ul.flat_attrs|safe }}>
+    {% for field in fields %}
+       <li>{{ field|safe }}</li>
+    {% endfor %}
+</ul>
