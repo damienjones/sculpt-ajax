@@ -156,13 +156,14 @@ class AjaxView(base_view_class):
                     print repr(response)
                 return AjaxExceptionResponse(response)
 
+
 # an AJAX response-generating view
 #
 # This is a generic view that expects derived classes to
 # populate a context, and then get configuration data from
 # urls.py that tells what (modal, toast, HTML updates) to
 # render and send back to the client. It's good for quick
-# prototyping but also for production code.
+# prototyping but also for lightweight production code.
 #
 class AjaxResponseView(AjaxView):
     modal = None
@@ -245,6 +246,7 @@ class AjaxResponseView(AjaxView):
         # other than a JsonResponse, the base class code
         # will complain
         return self.prepare_response(context)
+
 
 # an AJAX form view class
 #
