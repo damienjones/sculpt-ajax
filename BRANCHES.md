@@ -8,7 +8,7 @@ First public release. This is why the other sculpt-* libraries were released, so
 
 ## Features
 
-### feature/simple-messaging
+### feature/simple-messaging [DONE]
 
 In building web sites it's often useful to have a simple way to render
 a message in a template, either to a stand-alone web page or to an
