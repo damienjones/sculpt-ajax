@@ -18,7 +18,9 @@
 {% load sekizai_tags %}
 {% addtoblock "js" %}
 	{% block sculpt_modal %}{% include "sculpt_ajax/modal.html" %}{% endblock %}
-	<script type="text/javascript" src="/static/sculpt_ajax/sculpt_ajax.js"></script>
+{% endaddtoblock %}
+{% addtoblock "js" %}
+	<script type="text/javascript" src="{{ STATIC_URL }}sculpt_ajax/sculpt_ajax.js"></script>
 {% endaddtoblock %}
 {% addtoblock "js" %}{% block sculpt_js_init %}{% endblock %}{% endaddtoblock %}
 {% addtoblock "js" %}<script type="text/javascript">Sculpt.init();</script>{% endaddtoblock %}

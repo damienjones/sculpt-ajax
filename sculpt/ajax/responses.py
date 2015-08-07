@@ -345,4 +345,4 @@ class AjaxRawResponse(JsonResponse):
 
         # rewrite the response to be out data
         # without escaping
-        self.data = data
+        self.content = data

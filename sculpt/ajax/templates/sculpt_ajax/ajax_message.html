@@ -1,11 +1,10 @@
 {# template for rendering a "message" into a sculpt-ajax response #}
-{% load sculpt_ajax_tags %}
 {
 	"sculpt":"ajax",
 	"modal":{
-		"size":"{% escapejs %}{% block modal_size %}medium{% endblock %}{% endescapejs %}",
-		"title":"{% escapejs %}{% block message_title %}{% endblock %}{% endescapejs %}",
-		"message":"{% escapejs %}{% block message_body %}{% endblock %}{% endescapejs %}",
-		"code":"{% escapejs %}{% block message_code %}{% endblock %}{% endescapejs %}"
+		"size":"{% filter escapejs %}{% block modal_size %}medium{% endblock %}{% endfilter %}",
+		"title":"{% filter escapejs %}{% block message_title %}{% endblock %}{% endfilter %}",
+		"message":"{% filter escapejs %}{% block message_body %}{% endblock %}{% endfilter %}",
+		"code":"{% filter escapejs %}{% block message_code %}{% endblock %}{% endfilter %}"
 	}
 }
