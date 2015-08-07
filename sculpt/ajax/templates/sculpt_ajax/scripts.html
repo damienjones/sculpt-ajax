@@ -1,21 +1,26 @@
+{% comment %}
+
+	You will need django-sekizai installed to use this as-is.
+	If you don't want to use django-sekizai to automatically
+	place your script tags after your body, you will need to
+	manually include:
+
+		1. the modal HTML
+		2. the core JavaScript
+		3. any custom initialization of the JavaScript
+		4. the actual initialization trigger
+
+	You will also need to have included jQuery (whichever
+	version you prefer) somewhere else in your page, before
+	you load the core JavaScript.
+
+{% endcomment %}
 {% load sekizai_tags %}
-			{% addtoblock "js" %}{% block sculpt_modal %}
-			<!-- Modal -->
-			<div class="modal fade" id="sculpt_modal" tabindex="-1" role="dialog" aria-labelledby="" aria-hidden="true">
-				<div class="modal-dialog">
-					<div class="modal-content">
-						<div class="modal-header">
-							<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-							<h4 class="modal-title" id="sculpt_modal_title"></h4>
-						</div>
-						<div class="modal-body" id="sculpt_modal_body"></div>
-						<div class="modal-footer">
-							<button type="button" class="btn btn-default" id="sculpt_modal_button" data-dismiss="modal">Close</button>
-						</div>
-					</div>
-				</div>
-			</div>
-			<script type="text/javascript" src="/static/sculpt_ajax/sculpt_ajax.js"></script>
-			{% endblock %}{% endaddtoblock %}
-			{% addtoblock "js" %}{% block sculpt_js_init %}{% endblock %}{% endaddtoblock %}
-			{% addtoblock "js" %}<script type="text/javascript">Sculpt.init();</script>{% endaddtoblock %}
+{% addtoblock "js" %}
+	{% block sculpt_modal %}{% include "sculpt_ajax/modal.html" %}{% endblock %}
+{% endaddtoblock %}
+{% addtoblock "js" %}
+	<script type="text/javascript" src="{{ STATIC_URL }}sculpt_ajax/sculpt_ajax.js"></script>
+{% endaddtoblock %}
+{% addtoblock "js" %}{% block sculpt_js_init %}{% endblock %}{% endaddtoblock %}
+{% addtoblock "js" %}<script type="text/javascript">Sculpt.init();</script>{% endaddtoblock %}

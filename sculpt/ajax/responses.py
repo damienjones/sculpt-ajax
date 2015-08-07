@@ -122,7 +122,7 @@ class AjaxMixedResponse(JsonResponse):
         # do a modal
         if show_modal and 'modal' in response_data:
             modal_template = get_template(response_data['modal']['template_name'])
-            modaL_html = modal_template.render(context)
+            modal_html = modal_template.render(context)
             if 'title' in response_data['modal']:
                 modal_title = response_data['modal']['title']
             else:
@@ -175,6 +175,7 @@ class AjaxMixedResponse(JsonResponse):
 
         return rendered_html
 
+
 # AJAX success response
 # for when you need success, but it's a no-op client side
 # NOTE: this might be bad UX, consider toast!
@@ -184,12 +185,14 @@ class AjaxSuccessResponse(AjaxMixedResponse):
     def __init__(self):
         super(AjaxSuccessResponse, self).__init__(results = {})
 
+
 # AJAX data response
 #
 class AjaxDataResponse(AjaxMixedResponse):
 
     def __init__(self, response):
         super(AjaxDataResponse, self).__init__(results = response)
+
 
 # AJAX HTML update response
 #
@@ -198,6 +201,7 @@ class AjaxHTMLResponse(AjaxMixedResponse):
     def __init__(self, response):
         super(AjaxHTMLResponse, self).__init__(html = response)
 
+
 # AJAX toast response
 #
 class AjaxToastResponse(AjaxMixedResponse):
@@ -205,12 +209,14 @@ class AjaxToastResponse(AjaxMixedResponse):
     def __init__(self, response, **kwargs):
         super(AjaxToastResponse, self).__init__(toast = response)
 
+
 # AJAX modal response
 #
 class AjaxModalResponse(AjaxMixedResponse):
 
     def __init__(self, response = None, **kwargs):
         super(AjaxModalResponse, self).__init__(modal = response)
+
 
 #
 # error-ish responses
@@ -222,6 +228,7 @@ class AjaxRedirectResponse(JsonResponse):
 
     def __init__(self, response):
         super(AjaxRedirectResponse, self).__init__({ 'sculpt': 'ajax', 'location' : response })
+
 
 # AJAX exception response
 # NOTE: this is NOT an Exception, it's a response
@@ -237,6 +244,7 @@ class AjaxExceptionResponse(JsonResponse):
         # (code, title, message)
         super(AjaxExceptionResponse, self).__init__({ 'sculpt': 'ajax', 'exception' : response })
 
+
 # AJAX error response
 # NOTE: this is NOT an Exception, it's a response
 #
@@ -250,6 +258,7 @@ class AjaxErrorResponse(JsonResponse):
         # this really should verify the required keys are present in the response
         # (code, title, message)
         super(AjaxErrorResponse, self).__init__({ 'sculpt': 'ajax', 'error' : response })
+
 
 # AJAX form error response
 #
@@ -311,3 +320,29 @@ class AjaxFormErrorResponse(JsonResponse):
 
         super(AjaxFormErrorResponse, self).__init__(results)
 
+
+#
+# RAW response
+#
+
+# Occasioanlly, a response will be generated
+# that contains JSON data already serialized
+# to a string. We want to preserve that output
+# without re-encoding it, but we also do not
+# want to rewrite all the JSON response stuff.
+#
+# This is good any time you're using templates
+# to render JSON responses; you may also find
+# the {% escapejs %} ... {% endescapejs %}
+# tag helpful in writing the JSON.
+#
+class AjaxRawResponse(JsonResponse):
+
+    def __init__(self, data, *args, **kwargs):
+
+        # let the JSON class do its thing
+        super(AjaxRawResponse, self).__init__({}, *args, **kwargs)
+
+        # rewrite the response to be out data
+        # without escaping
+        self.content = data

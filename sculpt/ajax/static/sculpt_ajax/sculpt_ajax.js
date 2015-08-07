@@ -479,12 +479,12 @@
 			{
 				// this totally short-circuits the rest of the logic
 				// as this modal is completely self-contained
-				$('#modal').empty().append(data.message).modal();
+				$('#sculpt_modal').empty().append(data.message).modal();
 				return;
 			}
 
 			// set up the modal
-			$('#sculpt_modal .modal-dialog').removeClass('modal-lg modal-sm');
+			$('#sculpt_modal .modal-dialog').removeClass('modal-lg modal-md modal-sm');
 
 			if (size == 'large')
 				$('#sculpt_modal .modal-dialog').addClass('modal-lg');
