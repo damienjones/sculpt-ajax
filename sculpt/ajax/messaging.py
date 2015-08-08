@@ -2,6 +2,7 @@ from django.http import Http404, HttpResponse
 from django.template import TemplateDoesNotExist, RequestContext
 from django.template.loader import get_template
 from sculpt.ajax.responses import AjaxRawResponse
+from sculpt.ajax import settings 		# includes module defaults
 from sculpt.ajax.views import AjaxView
 import os.path
 
@@ -13,6 +14,13 @@ import os.path
 # request is an AJAX request. This view will do that.
 #
 # YOU MUST SANITIZE URLS BEFORE FEEDING THEM TO THIS CLASS.
+# Thankfully good regexes will do this.
+#
+# If you want to be able to invoke message rendering from
+# within an existing request, you will not be able to pass
+# in all your configuration details via urls.py. Instead
+# you will need to include them in your settings.py. See
+# sculpt.ajax.default_settings.py for more details.
 #
 class AjaxMessageView(AjaxView):
 	context = None
@@ -38,7 +46,12 @@ class AjaxMessageView(AjaxView):
 		if self.part2 is not None:
 			part2 = self.part2
 
-		return self.render_message(request, request.is_ajax(), self.context, self.template_base_path, self.html_base_template_name, self.ajax_base_template_name, category, part1, part2)
+		return self.render_message(request, category, part1, part2,
+				context = self.context,
+				template_base_path = self.template_base_path,
+				html_base_template_name = self.html_base_template_name,
+				ajax_base_template_name = self.ajax_base_template_name,
+			)
 
 	# core message rendering piece
 	#
@@ -47,7 +60,21 @@ class AjaxMessageView(AjaxView):
 	# a function-based view
 	#
 	@classmethod
-	def render_message(cls, request, is_ajax, context, template_base_path, html_base_template_name, ajax_base_template_name, category, part1, part2):
+	def render_message(cls, request, category, part1, part2 = None,
+			is_ajax = None, context = None, template_base_path = None,
+			html_base_template_name = None, ajax_base_template_name = None,
+			response_code = None):
+
+		# fill in any defaults
+		if is_ajax is None:
+			is_ajax = request.is_ajax()
+		if template_base_path is None:
+			template_base_path = settings.SCULPT_AJAX_TEMPLATE_BASE_PATH
+		if html_base_template_name is None:
+			html_base_template_name = settings.SCULPT_AJAX_HTML_BASE_TEMPLATE_NAME
+		if ajax_base_template_name is None:
+			ajax_base_template_name = settings.SCULPT_AJAX_AJAX_BASE_TEMPLATE_NAME
+
 		# figure out which template to use
 		try:
 			if part2 is None:
@@ -69,10 +96,22 @@ class AjaxMessageView(AjaxView):
 			# we already serialized to JSON, so don't do
 			# that again, but return a JsonResponse-derived
 			# object so AjaxView is happy
+			#
+			# NOTE: we never override the status code since
+			# that will likely cause the browser to do
+			# something unexpected with our resopnse, so we
+			# leave it at 200. If you are really sure you
+			# want to change the status code, change it
+			# yourself before returning the response back
+			# to Django.
+			#
 			return AjaxRawResponse(response_text)
 
 		else:
-			return HttpResponse(response_text)
+			response = HttpResponse(response_text)
+			if response_code is not None:
+				response.status_code = response_code
+			return response
 
 
 # default settings for common errors
