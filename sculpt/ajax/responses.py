@@ -1,10 +1,17 @@
-from django.conf import settings
 from django.http import JsonResponse
 from django.template.loader import get_template, render_to_string
 from django.utils.encoding import force_text
-from sculpt.json_tools import to_json
+from sculpt.ajax import settings
 import copy
 import json
+
+# we'd like to use the to_json method in
+# sculpt.json_tools if it's available, but if it
+# isn't, we define it as a no-op
+try:
+    from sculpt.json_tools import to_json
+except ImportError:
+    to_json = lambda x: x
 
 #
 # success-ish responses
@@ -139,7 +146,7 @@ class AjaxMixedResponse(JsonResponse):
             toast_template = get_template(response_data['toast']['template_name'])
             toast_html = toast_template.render(context)
             response['toast'] = {
-                    'duration': response_data['toast'].get('duration', settings.SCULPT_DEFAULT_TOAST_DURATION),
+                    'duration': response_data['toast'].get('duration', settings.SCULPT_AJAX_DEFAULT_TOAST_DURATION),
                     'html': toast_html,
                 }
             if 'class_name' in response_data['toast']:

@@ -1,7 +1,7 @@
 from django import forms
-from django.conf import settings
 from django.utils.translation import ungettext_lazy
 
+from sculpt.ajax import settings
 from sculpt.common import merge_dicts, Enumeration
 
 import importlib

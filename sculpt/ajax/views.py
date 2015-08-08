@@ -1,10 +1,10 @@
-from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template import RequestContext, Context
 from django.template.loader import get_template, render_to_string
 from django.views.generic import View
 
+from sculpt.ajax import settings
 from sculpt.ajax.forms import AjaxFormAliasMixin
 from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxMixedResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
 
@@ -68,7 +68,7 @@ class AjaxView(base_view_class):
         # supposed to wrap); trap exceptions
         try:
             # spew some debug data, perhaps
-            if settings.SCULPT_DUMP_AJAX:
+            if settings.SCULPT_AJAX_DUMP_REQUESTS:
                 raw_uri = request.META['RAW_URI'] if 'RAW_URI' in request.META else request.META['PATH_INFO']
                 if request.META.get('CONTENT_TYPE') == 'multipart/form-data':
                     # Django has already parsed the body and dumping a
@@ -95,14 +95,14 @@ class AjaxView(base_view_class):
                 # because it's already formatted as an error response
                 #
                 response = { 'code': 1, 'title': 'Invalid Response Type', 'message': 'Request generated an invalid response type (%s)' % results.__class__.__name__ }
-                if settings.SCULPT_DUMP_AJAX:
+                if settings.SCULPT_AJAX_DUMP_REQUESTS:
                     print 'AJAX INVALID RESPONSE TYPE'
                     print 'original response:', results.__class__.__name__
                     print results
                     print 'AJAX result:', response
                 return AjaxErrorResponse(response)
 
-            if settings.SCULPT_DUMP_AJAX:
+            if settings.SCULPT_AJAX_DUMP_REQUESTS:
                 print 'AJAX result:', results.content
             return results
             
@@ -117,7 +117,7 @@ class AjaxView(base_view_class):
                 import sys
                 import traceback
                 backtrace_text = ''.join(traceback.format_exception(*sys.exc_info()))
-                if settings.SCULPT_DUMP_AJAX:
+                if settings.SCULPT_AJAX_DUMP_REQUESTS:
                     print backtrace_text
                 return AjaxExceptionResponse({ 'code': 0, 'title': e.__class__.__name__, 'message': str(e), 'backtrace': backtrace_text })
                 
@@ -152,7 +152,7 @@ class AjaxView(base_view_class):
 
                 # give back a nice formatted response, AJAX-style
                 response = { 'code': 0, 'title': 'Exception', 'message': 'An exception occurred.' }
-                if settings.SCULPT_DUMP_AJAX:
+                if settings.SCULPT_AJAX_DUMP_REQUESTS:
                     print repr(response)
                 return AjaxExceptionResponse(response)
 

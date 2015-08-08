@@ -1,13 +1,31 @@
 # default settings
 
 # set this to True to echo all AJAX requests/responses to
-# the console
-SCULPT_DUMP_AJAX = False
+# the console; you should probably turn this off for
+# production configurations as it's both noisy and has
+# sensitive data, but it's useful for development and
+# at least safe in production if the console (and log file)
+# are secured
+SCULPT_AJAX_DUMP_REQUESTS = False
 
-# if you want to use the standard error handlers, you will
-# need to define the base directories for the message
-# classes; 403, 404, and 500 especially rely on the "error"
-# class
+# When processing forms we want to keep all the actual
+# error messages in a centralized file to make them easier
+# to find, but we also need to be able to override and
+# extend the error messages with app-specific ones.
+# This list should be redefined in settings.py to include
+# the app's error messages file in addition to the core
+# sculpt-ajax one.
+SCULPT_AJAX_FORM_ERROR_MESSAGES = (
+        'sculpt.ajax.form_errors',
+    )
+
+# if the sculpt.model_tools is available, this can be
+# set to True to derive all AjaxView classes in a way
+# that includes AjaxLoginRequiredMixin
+SCULPT_AJAX_LOGIN_REQUIRED = False
+
+# toast messages need a default duration, in seconds
+SCULPT_AJAX_DEFAULT_TOAST_DURATION = 4
 
 # The AjaxMessageView is versatile and accepts most of its
 # configuration via parameters passed in urls.py. However,
