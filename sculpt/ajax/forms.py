@@ -529,7 +529,7 @@ class NonField(object):
 #
 # One hole is that if Django forgets to list an error message yet
 # still includes the validator; this would allow the generic
-# validator email message to bleed through until we found and
+# validator error message to bleed through until we found and
 # fixed it.
 #
 # NOTE: you MUST provide a label for EVERY form field. This is
@@ -561,52 +561,65 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         form_specific_errors = error_messages.get(self.__class__.__name__)
         
         for name, field in self.fields.iteritems():
-            # first, make sure the field has a label; this is
-            # required for proper functioning of errors in the
-            # client-side code
-            if not hasattr(field, 'label') or field.label == "":
-                raise AttributeError(
-                        "Field %(name)s of type %(type)s is missing its label attribute" % {
-                                'name': name,
-                                'type': field.__class__.__name__
-                            }
-                    )
-
-            # NOTE: we use items() instead of iteritems()
-            # here because iteritems() returns an Iterator
-            # which will freak out if we change the entries
-            # in the dictionary while we are iterating;
-            # items() makes duplicate lists and can handle
-            # changing the original dictionary
-            for code, message in field.error_messages.items():
-                new_message = self._find_error_message(field, name, code, form_specific_errors)
-                self._replace_error_message(field.error_messages, code, new_message)
-        
-            # extra wrinkle: some of the fields don't have
-            # their own validation code, they import one or
-            # more validators which themselves may raise
-            # ValidationError; unfortunately Django doesn't
-            # collect validation error messages from these,
-            # so we look for a validators attribute and
-            # process it ourselves
-            if hasattr(field, 'validators'):
-                for validator in field.validators:
-                    if not hasattr(validator, 'code'):
-                        # because there's one that doesn't, damn you Django
-                        code = 'invalid'
-                    else:
-                        code = validator.code
-                    new_message = self._find_error_message(field, name, code, form_specific_errors)
-                    self._replace_error_message(field.error_messages, code, new_message)
+            self.rewrite_field_error_messages(name, field, form_specific_errors)
         
         # return the original result
         return result
 
+    # for a single field, rewrite the error messages
+    def rewrite_field_error_messages(self, name, field, form_specific_errors = None):
+        if form_specific_errors is None:
+            # get the error message overrides for this form, since
+            # they weren't provided to us
+            form_specific_errors = error_messages.get(self.__class__.__name__)
+
+        # first, make sure the field has a label; this is
+        # required for proper functioning of errors in the
+        # client-side code
+        if not hasattr(field, 'label') or field.label == "":
+            raise AttributeError(
+                    "Field %(name)s of type %(type)s is missing its label attribute" % {
+                            'name': name,
+                            'type': field.__class__.__name__
+                        }
+                )
+
+        # NOTE: we use items() instead of iteritems()
+        # here because iteritems() returns an Iterator
+        # which will freak out if we change the entries
+        # in the dictionary while we are iterating;
+        # items() makes duplicate lists and can handle
+        # changing the original dictionary
+        for code, message in field.error_messages.items():
+            new_message = self._find_error_message(field, name, code, form_specific_errors)
+            self._replace_error_message(field.error_messages, code, new_message)
+    
+        # extra wrinkle: some of the fields don't have
+        # their own validation code, they import one or
+        # more validators which themselves may raise
+        # ValidationError; unfortunately Django doesn't
+        # collect validation error messages from these,
+        # so we look for a validators attribute and
+        # process it ourselves
+        if hasattr(field, 'validators'):
+            for validator in field.validators:
+                if not hasattr(validator, 'code'):
+                    # because there's one that doesn't, damn you Django
+                    code = 'invalid'
+                else:
+                    code = validator.code
+                new_message = self._find_error_message(field, name, code, form_specific_errors)
+                self._replace_error_message(field.error_messages, code, new_message)
+
     # given a field, name and error code, find the appropriate
-    # error message
+    # error message in our form errors collections
+    #
     # NOTE: if form_specific_errors is None, it will be looked up
+    #
     # NOTE: when looking up __all__ messages, use None for field
+    #
     # NOTE: raises KeyError for undefined error messages
+    #
     @classmethod
     def _find_error_message(cls, field, field_name, code, form_specific_errors = None):
         if form_specific_errors == None:
