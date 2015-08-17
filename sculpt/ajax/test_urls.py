@@ -18,9 +18,9 @@ urlpatterns = patterns(
     url(r'^invalid-response/', ajax_test.ajax_test_invalid_response.as_view()),
     url(r'^form/', ajax_test.ajax_test_form.as_view()),
 
-	url(r'^(?P<category>error|message)/(?P<part1>'+SLUG_PATTERN+r')/((?P<part2>'+SLUG_PATTERN+r')/)?$', messaging_views.AjaxMessageView.as_view(
-			template_base_path = 'sculpt_ajax',
-			html_base_template_name = 'sculpt_ajax/html_message.html',
-			ajax_base_template_name = 'sculpt_ajax/ajax_message.html',
-		)),
+    url(r'^(?P<category>error|message)/(?P<part1>'+SLUG_PATTERN+r')/((?P<part2>'+SLUG_PATTERN+r')/)?$', messaging_views.AjaxMessageView.as_view(
+            template_base_path = 'sculpt_ajax',
+            html_base_template_name = 'sculpt_ajax/html_message.html',
+            ajax_base_template_name = 'sculpt_ajax/ajax_message.html',
+        )),
 )

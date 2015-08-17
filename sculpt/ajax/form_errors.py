@@ -30,18 +30,32 @@ error_messages = {
         # for each entry, use fieldclassname__errorcode (applies to that field class)
         # or just errorcode (applies to any class)
         '_global': {
-                # error messages that are not type-specific
-                'min_length': '__fieldname__ must be at least %(limit_value)d characters; you entered %(show_value)d.',     # technically 1 is possible but if you need that, just make it required
-                'min_value': '__fieldname__ must be at least %(limit_value)s.',
+                # error messages that are not type-specific (Django)
                 'max_length': (
                         '__fieldname__ must be no more than one character; you entered %(show_value)d.',
                         '__fieldname__ must be no more than %(limit_value)d characters; you entered %(show_value)d.',
                         'limit_value',
                     ),
                 'max_value': '__fieldname__ must be no more than %(limit_value)s.',
+                'min_length': '__fieldname__ must be at least %(limit_value)d characters; you entered %(show_value)d.',     # technically 1 is possible but if you need that, just make it required
+                'min_value': '__fieldname__ must be at least %(limit_value)s.',
                 'required': '__fieldname__ is required.',
-                
-                'nomatch': '%(fieldname1)s and %(fieldname2)s must match.',
+
+                # rule-based error mesages (sculpt.ajax)
+                'max_allowed': (
+                        'No more than one of __fieldname__ may be given.',
+                        'No more than %(max_allowed)d of __fieldname__ may be given.',
+                        'max_allowed',
+                    ),
+                'min_required': (
+                        'At least one of __fieldname__ is required.',
+                        'At least %(min_required)d of __fieldname__ are required.',
+                        'min_required',
+                    ),
+                'nomatch': '__fieldname__ must match.',
+                'not_unique': '__fieldname__ must all be different.',
+                'wrong_order': '%(fieldname1)s must be less than %(fieldname2)s.',
+                'wrong_order_equal': '%(fieldname1)s must be less than or equal to %(fieldname2)s.',
                 
                 # type-specific error messages
                 'ChoiceField__invalid_choice': '__fieldname__ does not have a valid choice.',       # Django's version of this message echoes back the user selection. We decline. This error shouldn't happen anyway (choice fields use drop-downs...)

@@ -11,7 +11,7 @@ from sculpt.ajax.default_settings import *
 from django.conf import settings
 
 for s in dir(settings):
-	if s == s.upper():
-		globals()[s] = getattr(settings, s)
+    if s == s.upper():
+        globals()[s] = getattr(settings, s)
 
 # ...and that's it

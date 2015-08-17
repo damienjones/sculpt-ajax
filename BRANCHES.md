@@ -8,6 +8,13 @@ First public release. This is why the other sculpt-* libraries were released, so
 
 ## Features
 
+### feature/enhanced-validation [DONE]
+
+Build out enhanced validation methods and clean up error message
+generation.
+
+I'm closing this branch for now but I may revisit it later.
+
 ### feature/simple-messaging [DONE]
 
 In building web sites it's often useful to have a simple way to render
