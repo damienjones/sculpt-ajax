@@ -44,12 +44,12 @@ error_messages = {
                 # rule-based error mesages (sculpt.ajax)
                 'max_allowed': (
                         'No more than one of __fieldname__ may be given.',
-                        'No more than %(limit_value)d of __fieldname__ may be given.',
-                        'max_required',
+                        'No more than %(max_allowed)d of __fieldname__ may be given.',
+                        'max_allowed',
                     ),
                 'min_required': (
                         'At least one of __fieldname__ is required.',
-                        'At least %(limit_value)d of __fieldname__ are required.',
+                        'At least %(min_required)d of __fieldname__ are required.',
                         'min_required',
                     ),
                 'nomatch': '__fieldname__ must match.',

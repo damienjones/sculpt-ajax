@@ -229,7 +229,7 @@ class EnhancedValidationMixin(object):
     # labels and return it as a single string
     def resolve_field_labels(self, field_list):
         # first extract the labels themselves
-        resolved_labels = [ self.fields[f].label for f in field_list if not isinstance(f, NonField)) ]
+        resolved_labels = [ self.fields[f].label for f in field_list if not isinstance(f, NonField) ]
 
         # now combine into a string
         return self.build_language_list(resolved_labels)
@@ -266,6 +266,14 @@ class EnhancedValidationMixin(object):
     #   max_allowed     maximum number of fields allowed;
     #                   defaults to len(field_list)
     #
+    # NOTE: This rule will not work as expected with Boolean
+    # fields because Django normalizes them to True/False even
+    # if you mark the field as not required. This makes sense
+    # for the way Django uses Boolean fields, and because the
+    # browser will not submit fields that contain no data (and
+    # unchecked boxes do not) and because you can't mark the
+    # field required with Django unless it's ALWAYS required.
+    #
     def require_fields(self, error_name, field_list, min_required = None, max_allowed = None, label = None):
         is_valid = True
 
@@ -273,11 +281,11 @@ class EnhancedValidationMixin(object):
             # only do this test if all the required fields
             # are supposed to be present
             resolved_values = self.resolve_field_values(field_list)
+
             fields_present = 0
             for v in resolved_values:
-                if v is not None:
+                if v not in (None, ''):
                     fields_present += 1
-
 
             if min_required is None:
                 min_required = 1
@@ -332,9 +340,9 @@ class EnhancedValidationMixin(object):
             errored_fields = [ False ] * len(field_list)
 
             for i in range(len(resolved_values)-1):
-                if resolved_values[i] is not None:
-                    for j in range(i,len(resolved_values)):
-                        if resolved_values[j] is not None and resolved_values[i] == resolved_values[j]:
+                if resolved_values[i] not in (None, ''):
+                    for j in range(i+1,len(resolved_values)):
+                        if resolved_values[j] not in (None, '') and resolved_values[i] == resolved_values[j]:
                             errored_fields[i] = True
                             errored_fields[j] = True
 
@@ -368,6 +376,14 @@ class EnhancedValidationMixin(object):
                 allow_equality_positions = []
 
             for i in range(0,len(resolved_values)-1):
+                # while it's possible all fields are supposed
+                # to be present, it's also possible that one
+                # or both fields might be missing, which is
+                # not a failure of this rule (but might be a
+                # failure of another requirement rule)
+                if resolved_values[i] is None or resolved_values[i+1] is None:
+                    continue
+
                 is_pair_valid = True
                 if i in allow_equality_positions:
                     # these are allowed to be equal
@@ -385,8 +401,9 @@ class EnhancedValidationMixin(object):
                             'fieldname1': self.fields[field_list[i]].label if not isinstance(field_list[i], NonField) else field_list[i].label(self),
                             'fieldname2': self.fields[field_list[i+1]].label if not isinstance(field_list[i+1], NonField) else field_list[i+1].label(self),
                         }
-                    self.add_error_message(error_name, pair_error_code, params = params, assign_to_field = field_list[i])
-                    self.add_error_message(error_name, pair_error_code, params = params, assign_to_field = field_list[i+1])
+                    label = self.resolve_field_labels([ field_list[i], field_list[i+1] ])
+                    self.add_error_message(error_name, pair_error_code, params = params, assign_to_field = field_list[i], field_label = label)
+                    self.add_error_message(error_name, pair_error_code, params = params, assign_to_field = field_list[i+1], field_label = label)
                     is_valid = False
 
         return is_valid
@@ -701,22 +718,32 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
     # deal with replacing error messages all that well
     def add_error_message(self, field_name, code, params = None, assign_to_field = None, field_label = None):
         # get the field object itself, if we can
-        if field_name == '__all__' or field_name == None:
-            field = None
-        else:
-            # we can't use getattr() because this
-            # bypasses the __getitem__ code that
-            # gives us access to BoundField instances
-            # directly off the form object; however,
-            # we don't need the BoundField instance,
-            # and the Field instance will do, so we
-            # can go directly into the fields
-            field = self.fields[field_name]
-        
+        #
+        # We're going to use this to look for class-specific
+        # error messages, but there are three cases where we
+        # might not be able to do this:
+        #
+        #   1. We're adding messages to __all__.
+        #   2. We're adding messages to a rule.
+        #   3. We gave field_name as None. (This is wrong.)
+        #
+        # We don't need the BoundField so we can go straight
+        # to self.fields.
+        #
+        field = self.fields.get(field_name)
+
         # next, get the error message itself
         new_message = self._find_error_message(field, field_name, code)
+
+        # if this was a tuple, perform the needed wrapping
+        # so that attempting to apply the formatting
+        # operator % will select the correct singular or
+        # plural string from the tuple
+        if isinstance(new_message, tuple):
+            new_message = ungettext_lazy(*new_message)
         
         # if we were given parameters, expand them
+        # (pluralizing happens here)
         if params:
             new_message = new_message % params
 
