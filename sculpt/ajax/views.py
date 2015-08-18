@@ -7,6 +7,7 @@ from django.views.generic import View
 from sculpt.ajax import settings
 from sculpt.ajax.forms import AjaxFormAliasMixin
 from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxModalResponse, AjaxRedirectResponse, AjaxMixedResponse, AjaxErrorResponse, AjaxExceptionResponse, AjaxFormErrorResponse
+from sculpt.common import Enumeration
 
 from collections import OrderedDict
 
@@ -42,26 +43,80 @@ class AjaxView(base_view_class):
     
     # POST handler will be implemented by the derived view class
 
-    # which methods we should catch exceptions for and re-wrap
-    # in AJAX-friendly wrappers; by default this is just POST,
-    # but if your class is returning JSON responses for other
-    # methods you should list them here so that errors are
-    # shown instead of blowing up client-side code
-    wrap_exceptions_methods = [ 'POST' ]
+    # There are three use cases for any particular method:
+    #   1. it is never an AJAX request
+    #   2. it is sometimes an AJAX request
+    #   3. it is always an AJAX request
+    #
+    # For most of our AJAX views, it's the third case. This is
+    # the simplest and most predictable, and for non-form requests
+    # we pretty much just allow POST and it's always AJAX. For
+    # forms, we might say GET is never AJAX and POST is always
+    # AJAX; this again is straightforward.
+    #
+    # We want to catch programming mistakes that return JSON
+    # reponses to non-AJAX requests and non-JSON responses to
+    # AJAX requests, which means we need to know which category
+    # each method belongs to. If we use SNIFF_AJAX, then we
+    # will look at the request to see if it claims to be AJAX
+    # or not.
+    #
+    AJAX_RESTRICTIONS = Enumeration(
+            (0, 'NEVER_AJAX'),
+            (1, 'SNIFF_AJAX'),
+            (2, 'ALWAYS_AJAX'),
+        )
 
-    # special handling: if an exception occurs in an AJAX POST, we
+    # list all request methods that we want to mark as AJAX; if
+    # we don't list them here, the default is NEVER_AJAX and we
+    # will not only not check for a JSON response, we won't
+    # wrap exceptions in a JSON wrapper, either
+    #
+    # NOTE: you can reset the AJAX restrictions mid-request, if
+    # you discover a request that is usually AJAX turns out not
+    # to be (e.g. file upload)
+    #
+    ajax_restrictions = {
+            'POST': AJAX_RESTRICTIONS.ALWAYS_AJAX,
+        }
+
+    # a wrapper to answer the question as to whether something is
+    # an AJAX request or not, taking into account the request
+    # method and the request.is_ajax() results; thus if a method
+    # is marked above as ALWAYS_AJAX, this method will return
+    # True regardless of what's in the request
+    @property
+    def is_ajax(self):
+        restrictions = self.ajax_restrictions.get(self.request.method, self.AJAX_RESTRICTIONS.NEVER_AJAX)
+        if restrictions == self.AJAX_RESTRICTIONS.NEVER_AJAX:
+            return False
+        elif restrictions == self.AJAX_RESTRICTIONS.SNIFF_AJAX:
+            return self.request.is_ajax()
+        else:
+            return True
+
+    # similary we often want to be able to ask what the base class
+    # of a response should be; this is based on whether it's AJAX
+    # or not
+    @property
+    def response_base_class(self):
+        if self.is_ajax:
+            return JsonResponse
+        else:
+            return HttpResponse
+
+    # special handling: if an exception occurs in an AJAX request, we
     # DO NOT want to return an exception as Django's default HTML-
     # formatted response. Instead, catch the exception and return
-    # an AJAX-formatted error. However, we can't do this in a POST
+    # an AJAX-formatted error. However, we can't do this in a post()
     # handler because the derived class gets first crack at handling
     # it, and that's the code we need to wrap in try/except. So we
     # do the wrapping here, in dispatch.
     def dispatch(self, request, *args, **kwargs):
 
-        # non-POST requests are not wrapped; you're on your own
-        # for error handling as we assume a GET request is for the
-        # form HTML
-        if request.method not in self.wrap_exceptions_methods:
+        # if we know this call is not AJAX, we don't need to do
+        # any wrapping of the output
+        if not self.is_ajax:
             return super(AjaxView, self).dispatch(request, *args, **kwargs)
             
         # otherwise it's a post (or at least something we're
@@ -84,7 +139,7 @@ class AjaxView(base_view_class):
             # call the actual POST handler
             results = super(AjaxView, self).dispatch(request, *args, **kwargs)
 
-            if not isinstance(results, JsonResponse):
+            if not isinstance(results, self.response_base_class):
                 # we want to make sure all AjaxView handlers return
                 # a response in the correct form; if not, we want
                 # to trap those errors early in development rather
@@ -93,6 +148,11 @@ class AjaxView(base_view_class):
                 # NOTE: we return this rather than raise it, because
                 # we don't have a backtrace (it's not helpful) and
                 # because it's already formatted as an error response
+                #
+                # NOTE: we deliberately look at self.response_base_class
+                # even though we're in the "is_ajax" branch, because
+                # the view class may have reset the AJAX restrictions
+                # on this request
                 #
                 response = { 'code': 1, 'title': 'Invalid Response Type', 'message': 'Request generated an invalid response type (%s)' % results.__class__.__name__ }
                 if settings.SCULPT_AJAX_DUMP_REQUESTS:
@@ -232,14 +292,14 @@ class AjaxResponseView(AjaxView):
 
         # do request setup
         rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
 
         # set up context
         context = {}
         initial = {}
         rv = self.prepare_context(context)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
 
         # render to AJAX response; if this returns anything
@@ -371,14 +431,14 @@ class AjaxFormView(AjaxResponseView):
 
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, (HttpResponse)):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         # set up context and initial form data
         context = {}
         initial = {}
         rv = self.prepare_context(context, initial)
-        if isinstance(rv, (HttpResponse)):
+        if isinstance(rv, self.response_base_class):
             return rv
 
         # create form(s) and give the derived class a chance
@@ -391,7 +451,7 @@ class AjaxFormView(AjaxResponseView):
             setattr(form.helper, k, self.helper_attrs[k])
 
         rv = self.prepare_form(form)
-        if isinstance(rv, (HttpResponse)):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         # render the template and give back a response
@@ -414,7 +474,7 @@ class AjaxFormView(AjaxResponseView):
         
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         # create the form based on the submitted data
@@ -424,7 +484,7 @@ class AjaxFormView(AjaxResponseView):
         else:
             form = self.form_class(request.POST, **self.form_attrs)
         rv = self.prepare_form(form)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         if self.is_partial_validation:
@@ -433,7 +493,7 @@ class AjaxFormView(AjaxResponseView):
             
             # call any processing needed for this partial form
             rv = self.process_partial_form(form)
-            if isinstance(rv, JsonResponse):
+            if isinstance(rv, self.response_base_class):
                 return rv
             
             # whether we are valid or not, we actually go ahead 
@@ -461,12 +521,12 @@ class AjaxFormView(AjaxResponseView):
             context = {}
             initial = {}
             rv = self.prepare_context(context, initial)
-            if isinstance(rv, (HttpResponse)):
+            if isinstance(rv, self.response_base_class):
                 # in case the context-creating needs to bail
                 return rv
             rv = self.prepare_response(context)
 
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             # we now have a valid JSON response; stop
             return rv
 
@@ -703,7 +763,7 @@ class AjaxMultiFormView(AjaxView):
 
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, HttpResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         # set up context and initial form data
@@ -725,13 +785,13 @@ class AjaxMultiFormView(AjaxView):
 
             initials[form_alias] = { 'form_alias': form_alias }
             rv = self.prepare_context(context, initials[form_alias], form_alias)
-            if isinstance(rv, HttpResponse):
+            if isinstance(rv, self.response_base_class):
                 return rv
 
         # and the global context prep, after all the
         # forms are done
         rv = self.prepare_context__all(context)
-        if isinstance(rv, HttpResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
 
         # create form(s) and give the derived class a chance
@@ -763,7 +823,7 @@ class AjaxMultiFormView(AjaxView):
                 setattr(form.helper, k, helper_attrs[k])
 
             rv = self.prepare_form(form, form_alias)
-            if isinstance(rv, HttpResponse):
+            if isinstance(rv, self.response_base_class):
                 return rv
         
         # render the template and give back a response
@@ -786,7 +846,7 @@ class AjaxMultiFormView(AjaxView):
         
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         # figure out which form is submitted
@@ -837,7 +897,7 @@ class AjaxMultiFormView(AjaxView):
             form = form_class(request.POST, **form_attrs)
 
         rv = self.prepare_form(form, form_alias)
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
         
         if self.is_partial_validation:
@@ -846,7 +906,7 @@ class AjaxMultiFormView(AjaxView):
             
             # call any processing needed for this partial form
             rv = self.process_partial_form(form, form_alias)
-            if isinstance(rv, JsonResponse):
+            if isinstance(rv, self.response_base_class):
                 return rv
             
             # whether we are valid or not, we actually go ahead 
@@ -866,7 +926,7 @@ class AjaxMultiFormView(AjaxView):
         rv = self.process_form(form, form_alias)
         
         #**** MAKE LIKE AjaxFormView AND FALL BACK TO AjaxResponseView
-        if isinstance(rv, JsonResponse):
+        if isinstance(rv, self.response_base_class):
             return rv
         if isinstance(rv, basestring):
             # we could just overwrite self.target_url
