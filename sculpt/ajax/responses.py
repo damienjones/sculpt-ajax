@@ -140,6 +140,8 @@ class AjaxMixedResponse(JsonResponse):
                     'title': modal_title,
                     'message': modal_html,
                 }
+            if 'size' in response_data['modal']:
+                response['modal']['size'] = response_data['modal']['size']
 
         # do toast
         if show_toast and 'toast' in response_data:
