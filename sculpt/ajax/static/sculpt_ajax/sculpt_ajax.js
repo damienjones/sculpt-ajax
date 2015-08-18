@@ -198,6 +198,11 @@
 			// don't want it to pop up a modal saying "You canceled the operation".
 			// By marking this you know that you are risking possibly unexpected behaviour.
 
+			// convenience option: if opts is just a string, treat it as
+			// the URL
+			if (typeof(opts) == 'string')
+				opts = { url: opts };
+
 			// overlay call-specific options onto our defaults
 			var new_opts = $.extend({}, {
 				accepts: 'application/json',
@@ -1305,6 +1310,9 @@
 
 			}).on('focusout.sculpt.liveupdate', '._sculpt_ajax_live', function (e) {
 				that._live_update_blur();
+
+			}).on('change.sculpt.liveupdate', 'select._sculpt_ajax_live', function (e) {
+				that._live_update_submit();
 
 			});
 		},
