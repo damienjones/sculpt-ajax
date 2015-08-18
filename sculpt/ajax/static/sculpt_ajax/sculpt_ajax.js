@@ -483,8 +483,17 @@
 			if (size == 'raw')
 			{
 				// this totally short-circuits the rest of the logic
-				// as this modal is completely self-contained
-				$('#sculpt_modal').empty().append(data.message).modal();
+				// as this modal is completely self-contained; however,
+				// we need to save the original modal template so we
+				// can restore it when we're done
+				var original_modal = $('#sculpt_modal').children().detach();
+				$('#sculpt_modal').empty().append(data.message).modal().on(
+					'hidden.bs.modal', function(e){
+						// should check that this is the right modal
+						$('#sculpt_modal').empty().append(original_modal);
+					}
+				);
+
 				return;
 			}
 
