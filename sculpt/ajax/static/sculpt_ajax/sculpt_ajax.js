@@ -309,8 +309,21 @@
 			else if (data.form_error != undefined)
 			{
 				this.show_form_error(data.form_error, function() {
-					if (typeof(failure) == "function")
-						failure(false, data, status, null, jqXHR);
+					if (data.form_error.length == 0)
+					{
+						// zero errors means successful validation;
+						// this state might be the result of partial
+						// validation so it's not wrong
+						if (typeof(success) == "function")
+							success(true, data, status, null, jqXHR);
+					}
+					else
+					{
+						// we have at least one error, so we invoke
+						// the failure callback
+						if (typeof(failure) == "function")
+							failure(false, data, status, null, jqXHR);
+					}
 				}, data.partial, data.error);
 			}
 
@@ -705,8 +718,8 @@
 			});
 
 			// set up partial validation
-			$(document).on('focusout.sculpt.partial_validation', 'form._sculpt_ajax_partial.form-group select, form._sculpt_ajax_partial .form-group input, form._sculpt_ajax_partial .form-group textarea', function (e) {
-				// NOTE: we don't use the registered vallbacks for partial
+			$(document).on('focusout.sculpt.partial_validation', 'form._sculpt_ajax_partial .form-group select, form._sculpt_ajax_partial .form-group input, form._sculpt_ajax_partial .form-group textarea', function (e) {
+				// NOTE: we don't use the registered callbacks for partial
 				var form = $(this).parents('form')[0];
 
 				// sometimes we get an event that looks like we should

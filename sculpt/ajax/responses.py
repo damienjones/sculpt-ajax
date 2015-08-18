@@ -327,8 +327,9 @@ class AjaxFormErrorResponse(JsonResponse):
             }
         if is_partial:
             results['partial'] = {
-                    'last_field': form.add_prefix(last_field),
-                    'focus_field': form.add_prefix(focus_field),
+                    # these should ALREADY have prefixes on them
+                    'last_field': last_field,
+                    'focus_field': focus_field,
                 }
         if error != None:
             results['error'] = to_json(error, [ 'code', 'title', 'message' ])   # just these valid fields
