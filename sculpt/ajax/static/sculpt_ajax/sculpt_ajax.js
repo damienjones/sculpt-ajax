@@ -556,14 +556,18 @@
 					obj.append(update_item.html);
 				else if (update_item.mode == 'prepend')
 					obj.prepend(update_item.html);
+				else if (update_item.mode == 'before')
+					obj.before(update_item.html);
+				else if (update_item.mode == 'after')
+					obj.after(update_item.html);
 				else if (update_item.mode == 'replace')
 					obj.replaceWith(update_item.html);
 				else if (update_item.mode == 'remove')
 				{
 					obj.remove();
-					return;				// no class updates on removed object
+					continue;				// no class updates on removed object
 				}
-				else
+				else if (update_item.mode != 'noop')
 					obj.html(update_item.html);
 
 				// add/remove classes, if requested
@@ -573,6 +577,12 @@
 					obj.addClass(update_item.class_add);
 				if (update_item.class_remove != undefined)
 					obj.removeClass(update_item.class_remove);
+
+				// show/hide, if requested
+				if (update_item.display == 'show')
+					obj.show();
+				else if (update_item.display == 'hide')
+					obj.hide();
 
 				this._init_chosen($('#'+update_item.id)[0]);	// set up chosen on any selects in fresh HTML
 			}
