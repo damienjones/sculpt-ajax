@@ -831,7 +831,11 @@ class AjaxMultiFormView(AjaxView):
             form_attrs['prefix'] = form_alias
 
         # create the form based on the submitted data
-        form = form_class(request.POST, **form_attrs)
+        if hasattr(request, 'FILES') and request.FILES:
+            form = form_class(request.POST, request.FILES, **form_attrs)
+        else:
+            form = form_class(request.POST, **form_attrs)
+
         rv = self.prepare_form(form, form_alias)
         if isinstance(rv, JsonResponse):
             return rv
