@@ -1324,7 +1324,7 @@
 				// only set up the timer if we have a delay
 				if (delay != 0)
 					that.live_update_key_timer = window.setTimeout(function () {
-						that._live_update_blur();	// wrap the callback so "this" is available inside the callback
+						that._live_update_submit();		// we know it's changed, submit it
 					}, delay);
 
 			}).on('focusout.sculpt.liveupdate', '._sculpt_ajax_live', function (e) {
@@ -1337,12 +1337,15 @@
 		},
 
 		'_live_update_blur': function () {
-			// only bother to submit if the field was actually changed
-			if (this.live_update_was_changed)
-				this._live_update_submit();
+			if (this.live_update_focused_field != null)
+			{
+				// only bother to submit if the field was actually changed
+				if (this.live_update_was_changed)
+					this._live_update_submit();
 
-			// make sure we indicate we're no longer tracking any field
-			this.live_update_focused_field = null;
+				// make sure we indicate we're no longer tracking any field
+				this.live_update_focused_field = null;
+			}
 		},
 
 		'_live_update_submit': function () {
