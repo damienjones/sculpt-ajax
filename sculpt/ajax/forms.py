@@ -778,6 +778,7 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         if hasattr(self.fields[field_name].widget, 'choices'):
             self.fields[field_name].widget.choices = choices
 
+
 # a form mix-in that automatically includes the form alias field
 # so that AjaxMultiFormView can dispatch submission to the correct
 # handler
@@ -789,3 +790,17 @@ class AjaxFormAliasMixin(forms.Form):
             widget = forms.HiddenInput(),
         )
 
+
+# mixin that includes an upload field, and automatically flags
+# the form as containing an upload
+class AjaxUploadFormMixin(forms.Form):
+
+    uploaded_file = forms.FileField(label = 'Uploaded File')
+
+    def setup_form_helper(self, helper):
+        if helper.form_class not in ('', None):
+            helper.form_class = helper.form_class + ' _sculpt_ajax_upload'
+        else:
+            helper.form_class = '_sculpt_ajax_upload'
+
+        return super(AjaxUploadFormMixin, self).setup_form_helper(helper)

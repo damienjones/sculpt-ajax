@@ -70,7 +70,7 @@ class AjaxView(base_view_class):
             # spew some debug data, perhaps
             if settings.SCULPT_AJAX_DUMP_REQUESTS:
                 raw_uri = request.META['RAW_URI'] if 'RAW_URI' in request.META else request.META['PATH_INFO']
-                if request.META.get('CONTENT_TYPE') == 'multipart/form-data':
+                if request.META.get('CONTENT_TYPE','').startswith('multipart/form-data'):
                     # Django has already parsed the body and dumping a
                     # full uploaded file's data will not be helpful
                     print 'AJAX request:', raw_uri, 'MULTIPART: <file upload> +', request.POST
