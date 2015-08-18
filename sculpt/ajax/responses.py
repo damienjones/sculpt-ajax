@@ -143,14 +143,20 @@ class AjaxMixedResponse(JsonResponse):
 
         # do toast
         if show_toast and 'toast' in response_data:
-            toast_template = get_template(response_data['toast']['template_name'])
-            toast_html = toast_template.render(context)
-            response['toast'] = {
-                    'duration': response_data['toast'].get('duration', settings.SCULPT_AJAX_DEFAULT_TOAST_DURATION),
-                    'html': toast_html,
-                }
-            if 'class_name' in response_data['toast']:
-                response['toast']['class_name'] = response_data['toast']['class_name']
+            toast_list = response_data['toast']
+            if isinstance(toast_list, dict):
+                toast_list = [ toast_list ]
+            response['toast'] = []
+            for toast in toast_list:
+                toast_template = get_template(toast['template_name'])
+                toast_html = toast_template.render(context)
+                rendered_toast = {
+                        'duration': toast.get('duration', settings.SCULPT_AJAX_DEFAULT_TOAST_DURATION),
+                        'html': toast_html,
+                    }
+                if 'class_name' in toast:
+                    rendered_toast['class_name'] = toast['class_name']
+                response['toast'].append(rendered_toast)
 
         # do HTML updates
         if show_updates and 'updates' in response_data:
