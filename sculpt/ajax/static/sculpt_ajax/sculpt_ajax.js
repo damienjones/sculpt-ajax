@@ -30,6 +30,7 @@
 		// _sculpt_ajax_upload - form contains upload field
 		// _sculpt_ajax_live - field is live-updated to the server; requires extra attributes
 		// _sculpt_ajax_post - if added to links, forces them to AJAX POST (supports responses)
+		// _sculpt_modal_dismiss - if added to links, forces modal to close first (_sculpt_ajax_post required)
 		// _sculpt_decorative - if added to links, swallows clicks (useful for prototyping)
 
 		'ajax': function (opts, success, failure, show_busy, fail_silently) {
@@ -1399,6 +1400,12 @@
 			$(document).on('click', 'a._sculpt_ajax_post', function (e) {
 				var other = this;
 				e.preventDefault();
+
+				// we may be working on a link inside a modal,
+				// which needs to close the modal before making
+				// a request that might trigger another modal
+				if ($(other).hasClass('_sculpt_modal_dismiss'))
+					$('#sculpt_modal').modal('hide');
 
 				// check for prepare handler
 				if (other.id in that.auto_form_handlers)
