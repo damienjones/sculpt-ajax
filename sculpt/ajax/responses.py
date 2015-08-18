@@ -185,8 +185,10 @@ class AjaxMixedResponse(JsonResponse):
         for i in range(len(rendered_html)):
             # render the update                
             template_name = rendered_html[i].pop('template_name')   # removes it from the dict so it won't go client-side
-            template = get_template(template_name)
-            rendered_html[i]['html'] = template.render(context)
+            if template_name is not None:
+                # None is interpreted to mean the HTML is already rendered
+                template = get_template(template_name)
+                rendered_html[i]['html'] = template.render(context)
 
         return rendered_html
 

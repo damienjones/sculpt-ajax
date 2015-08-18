@@ -229,6 +229,7 @@ class AjaxResponseView(AjaxView):
     modal = None
     toast = None
     updates = None
+    context = None
 
     # shared setup based on request parameters;
     #
@@ -296,7 +297,7 @@ class AjaxResponseView(AjaxView):
             return rv
 
         # set up context
-        context = {}
+        context = self.context or {}
         initial = {}
         rv = self.prepare_context(context)
         if isinstance(rv, self.response_base_class):
@@ -435,7 +436,7 @@ class AjaxFormView(AjaxResponseView):
             return rv
         
         # set up context and initial form data
-        context = {}
+        context = self.context or {}
         initial = {}
         rv = self.prepare_context(context, initial)
         if isinstance(rv, self.response_base_class):
@@ -611,6 +612,7 @@ class AjaxMultiFormView(AjaxView):
     template_name = None
     form_classes = None
     target_url = None
+    context = None
     
     # sometimes we want a form view to only render form(s),
     # not process them (especially if we are including more
@@ -767,7 +769,7 @@ class AjaxMultiFormView(AjaxView):
             return rv
         
         # set up context and initial form data
-        context = {}
+        context = self.context or {}
         initials = {}
         for form_alias,form_data in self.form_classes.iteritems():
             self.form_data = form_data              # in case handler needs it
