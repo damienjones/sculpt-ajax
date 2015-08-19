@@ -598,7 +598,7 @@
 				else if (update_item.display == 'hide')
 					obj.hide();
 
-				this._init_chosen($('#'+update_item.id)[0]);	// set up chosen on any selects in fresh HTML
+				//this._init_chosen($('#'+update_item.id)[0]);	// set up chosen on any selects in fresh HTML
 			}
 		},
 
