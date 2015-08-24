@@ -24,6 +24,10 @@ error_messages = collect_error_messages()
 
 # CrispyForms mixin boilerplate
 #
+# Eventually, django-crispy-forms will not be a requirement
+# and it will be possible to omit it from the parent
+# class list. But not today.
+#
 class CrispyMixin(object):
 
     def __init__(self, *args, **kwargs):
