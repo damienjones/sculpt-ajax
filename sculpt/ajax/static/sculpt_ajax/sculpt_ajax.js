@@ -20,6 +20,7 @@
 
 		// internal tracking flags
 		'_skip_partial_validation': null,	// gets set to form name that should be skipped for partial validation because it was submitted
+		'_busy_counter': 0,					// number of in-progress requests that want busy
 
 		// special classes
 		//
@@ -30,6 +31,7 @@
 		// _sculpt_ajax_upload - form contains upload field
 		// _sculpt_ajax_live - field is live-updated to the server; requires extra attributes
 		// _sculpt_ajax_post - if added to links, forces them to AJAX POST (supports responses)
+		// _sculpt_ajax_busy - if added to links, forces AJAX request to show busy indicator
 		// _sculpt_modal_dismiss - if added to links, forces modal to close first (_sculpt_ajax_post required)
 		// _sculpt_decorative - if added to links, swallows clicks (useful for prototyping)
 
@@ -237,20 +239,43 @@
 			}
 
 			// if we are going to show a "busy" indicator, it would go here
+			if (show_busy)
+				this.show_busy();
 
 			// make the request
 			var jqXHR = $.ajax(new_opts);
+			jqXHR._sculpt_ajax_busy = show_busy;	// save this state where we can retrieve it
 
 			// set up the callbacks; we do this here because
 			// we are going to pass in the given callbacks
 			var that = this;				// the inline functions below run with a different "this" context, so alias it
 			jqXHR.done(function(data, status, jqXHR) {
+				if (jqXHR._sculpt_ajax_busy)
+					that.hide_busy();
 				return that._ajax_success(success, failure, fail_silently, show_busy, data, status, jqXHR);
 			}).fail(function(jqXHR, status, message) {
+				if (jqXHR._sculpt_ajax_busy)
+					that.hide_busy();
 				return that._ajax_failure(success, failure, fail_silently, show_busy, jqXHR, status, message);
 			});
 
 			return jqXHR;
+		},
+
+		// show the busy indicator
+		'show_busy': function () {
+			console.log('busy on');
+			this._busy_counter++;
+			if (this._busy_counter > 0)
+				$('#sculpt_busy').show();
+		},
+
+		// hide the busy indicator
+		'hide_busy': function () {
+			console.log('busy off');
+			this._busy_counter--;
+			if (this._busy_counter <= 0)
+				$('#sculpt_busy').hide();
 		},
 
 		// whenever an AJAX method "succeeds", this is called; this includes
@@ -1425,6 +1450,12 @@
 					failure = that.auto_form_handlers[other.id].failure;
 					show_busy = that.auto_form_handlers[other.id].show_busy;
 				}
+
+				// the link itself may be flagged to show busy,
+				// if the generating page knows it may be a slow
+				// request
+				if ($(other).hasClass('_sculpt_ajax_busy'))
+					show_busy = true;
 
 				// make the AJAX call, with handlers
 				that.ajax({
