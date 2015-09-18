@@ -264,7 +264,6 @@
 
 		// show the busy indicator
 		'show_busy': function () {
-			console.log('busy on');
 			this._busy_counter++;
 			if (this._busy_counter > 0)
 				$('#sculpt_busy').show();
@@ -272,7 +271,6 @@
 
 		// hide the busy indicator
 		'hide_busy': function () {
-			console.log('busy off');
 			this._busy_counter--;
 			if (this._busy_counter <= 0)
 				$('#sculpt_busy').hide();
