@@ -1427,6 +1427,8 @@
 				// we may be working on a link inside a modal,
 				// which needs to close the modal before making
 				// a request that might trigger another modal
+				//**** if an error response comes back too quickly
+				// this breaks
 				if ($(other).hasClass('_sculpt_modal_dismiss'))
 					$('#sculpt_modal').modal('hide');
 
