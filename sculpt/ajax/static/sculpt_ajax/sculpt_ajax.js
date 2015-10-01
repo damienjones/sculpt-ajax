@@ -332,7 +332,7 @@
 			// since this is complex, we'll just hand this off
 			else if (data.form_error != undefined)
 			{
-				this.show_form_error(data.form_error, function() {
+				this.show_form_error(data, function() {
 					if (data.form_error.length == 0)
 					{
 						// zero errors means successful validation;
@@ -348,7 +348,7 @@
 						if (typeof(failure) == "function")
 							failure(false, data, status, null, jqXHR);
 					}
-				}, data.partial, data.error);
+				});
 			}
 
 			// case 4d: processing error
@@ -883,7 +883,10 @@
 		},
 
 		// given a set of form errors, show them to the user
-		'show_form_error': function (form_error, done, partial, error_modal) {
+		'show_form_error': function (data, done, partial, error_modal) {
+			var form_error = data.form_error;
+			var partial = data.partial;
+			var error_modal = data.error;
 			var is_partial = (typeof(partial) != 'undefined');			// whether this is a partial validation result
 			var error = $.extend({}, this.messages.ajax_form_error);	// first-level copy so we don't modify the original
 			var messages = [];
@@ -1009,6 +1012,15 @@
 			// were looking at; find any focused field that has
 			// errors and show its tooltip, just to be sure
 			//f.find('.error:focus').tooltip('show');
+
+			// it's possible that, along with zero or more errors,
+			// we have toast or HTML updates to apply
+			if (data.html != undefined)
+				this.update_html(data.html);
+
+			if (data.toast != undefined)
+				for (i = 0; i < data.toast.length; i++)
+					this.queue_toast(data.toast[i]);
 
 			// for full validation, summarize the errors for the
 			// user in a modal
