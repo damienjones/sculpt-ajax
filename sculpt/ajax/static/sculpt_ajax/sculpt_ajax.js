@@ -16,6 +16,7 @@
 		'auto_form_handlers': {},			// any registered automatic form handlers
 		'upload_queue': [],					// any collected uploadable files
 		'upload_queue_id': 1,				// ID of next queue item (so we never duplicate an HTML ID)
+		'upload_queue_in_progress': 0,		// number of concurrent uploads going
 		'chosen_selector': 'select',		// selector to use to turn things into chosen selects
 
 		// internal tracking flags
@@ -376,9 +377,11 @@
 				// handler right now without doing anything else
 				if (data.results != undefined)
 				{
+					var continue_processing = false;
 					if (typeof(success) == "function")
-						success(true, data, status, null, jqXHR);
-					return;	// STOP NOW
+						continue_processing = success(true, data, status, null, jqXHR);
+					if (!continue_processing)
+						return;	// STOP NOW
 				}
 
 				// the remaining cases are not mutually-exclusive
@@ -604,6 +607,11 @@
 					obj.remove();
 					continue;				// no class updates on removed object
 				}
+				else if (update_item.mode == 'dismiss')
+				{
+					obj.modal('hide');
+					continue;				// no class updates on dismissed modal
+				}
 				else if (update_item.mode != 'noop')
 					obj.html(update_item.html);
 
@@ -726,6 +734,8 @@
 			});
 
 			// set up file handling
+			// there are two events here: changing the file in an input field
+			// and dropping file(s) onto a drop target
 			$(document).on('change', 'form._sculpt_ajax_upload input[type=file]', function(e) {
 				var form = $(this).parents('form._sculpt_ajax_upload')[0];
 
@@ -734,11 +744,96 @@
 					if (typeof(that.auto_form_handlers[form.id].prepare) == "function")
 						if (that.auto_form_handlers[form.id].prepare(this))
 							return;
-					// submit the form via AJAX and handle the results as indicated
-					that._upload_new_file(e, this, that.auto_form_handlers[form.id].success, that.auto_form_handlers[form.id].failure, that.auto_form_handlers[form.id].show_busy);
 				}
-				else
-					that._upload_new_file(e, this);
+
+				// set up the queue object
+				var queued_item = {
+					name: e.target.files[0].name,
+					action: form.action,
+					form_data: FormData(form),
+					queue_id: $(form).attr('data-queue-id'),
+					target_field_id: $(form).attr('data-target-field-id'),
+					allow_multiple: $(form).attr('data-allow-multiple')
+				};
+
+				if (form.id in that.auto_form_handlers)
+				{
+					queued_item.success = that.auto_form_handlers[form.id].success;
+					queued_item.failure = that.auto_form_handlers[form.id].failure;
+					queued_item.progress = that.auto_form_handlers[form.id].progress;
+					queued_item.show_busy = that.auto_form_handlers[form.id].show_busy;
+				}
+
+				// queue it up
+				that.upload_queue_append(queued_item);
+			});
+
+			// for hidden file input fields, honor a proxy click
+			// NOTE: this can be used for more than just upload fields,
+			// hence the generic name
+			$(document).on('click', '._sculpt_proxy_click', function(e){
+				var target = $(this).attr('data-target-id');
+				$('#'+target).click();
+			});
+
+			// file drag-and-drop events
+			$(document).on('drop', '._sculpt_upload_dropper', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				$(e.target).removeClass('_sculpt_upload_active');
+				console.log(e);
+
+				// multiple files may have been dropped
+				var file_list = e.originalEvent.dataTransfer.files;
+				var i;
+
+				for (i = 0; i < file_list.length; i++)
+				{
+					// create a fake form with this file
+					var fd = new FormData();
+					fd.append($(this).attr('data-form-field-name'), file_list[i]);
+
+					// set up the queue object
+					var queued_item = {
+						name: file_list[i].name,
+						action: $(this).attr('data-form-action'),
+						form_data: fd,
+						queue_id: $(this).attr('data-queue-id'),
+						target_field_id: $(this).attr('data-target-field-id'),
+						allow_multiple: $(this).attr('data-allow-multiple')
+					};
+
+					// extract data from the dropped files and prep them
+					// for uploading
+					if (this.id in that.auto_form_handlers)
+					{
+						queued_item.success = that.auto_form_handlers[this.id].success;
+						queued_item.failure = that.auto_form_handlers[this.id].failure;
+						queued_item.progress = that.auto_form_handlers[this.id].progress;
+						queued_item.show_busy = that.auto_form_handlers[this.id].show_busy;
+					}
+
+					// queue it up
+					that.upload_queue_append(queued_item);
+				}
+			});
+
+			$(document).on('dragenter', '._sculpt_upload_dropper', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				$(e.target).addClass('_sculpt_upload_active');
+			});
+
+			$(document).on('dragleave', '._sculpt_upload_dropper', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				$(e.target).removeClass('_sculpt_upload_active');
+			});
+
+			$(document).on('dragover', '._sculpt_upload_dropper', function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				// do nothing except swallow this event
 			});
 
 			// set up partial validation
@@ -1049,105 +1144,219 @@
 		// FILE UPLOAD
 		//
 
-		// when file input object receives new files
-		'_upload_new_file': function(e, ff, success, failure, show_busy) {
-			var that = this;
+		// File uploads are complicated because we want to make the
+		// user experience good. Since the upload itself can take some
+		// time, we want to allow it to proceed asynchronously, and also
+		// allow validation to be done repeatedly while only transferring
+		// the file once.
+		//
+		// To make this work, we create two forms. One form processes a
+		// single file upload at a time and returns an ID for the stored
+		// object; this object will typically expire in 24 hours if not
+		// committed. This returned ID is then transferred to a hidden
+		// field in the target form, optionally allowing for multiple
+		// files to be uploaded. These IDs can be validated server-side.
+		//
+		// Because we allow multiple files to be uploaded, we always
+		// route uploads through a queue. Each queue entry is an object
+		// with the following fields:
+		//
+		//	action			URL to post file to
+		//	form_data		a FormData object with the files already attached
+		//
+		//	queue_id		the ID (not jQuery object, not DOM object) of
+		//					the queue HTML, which should contain an UL tag
+		//
+		//	success			called when file is successfully uploaded
+		//	failure			called when file upload is cancelled or otherwise fails
+		//	progress		called whenever file upload progress changes
+		//	show_busy		whether to show the busy indicator
+		//
+		//	target_field_id	the ID (not the name) of the hidden field
+		//	allow_multiple	whether multiple files are allowed; if not,
+		//					any uploads targeting the field will replace it
+		//					rather than append to it
 
-			// pluck out File object from updated input object
-			var file_list = ff.files;
-			//for (var i = 0; i < file_list.length; i++)
-			//	console.log(i, file_list[i].name, file_list[i].size, file_list[i].type);
-			var parent_form = $(ff).closest('form');
+		// add a file to the queue
+		// this will make it visible in the queue but won't start
+		// the upload process right away
+		'upload_queue_append': function (queued_file) {
+			console.log('appending file to queue', queued_file);
+
+			// in order to associate this with some HTML we will
+			// need a unique ID
+			this.upload_queue_id++;
+			var unique_name = 'sculpt_upload_' + this.upload_queue_id.toString(16);
+			queued_file.id = unique_name;
+
+			// make sure the queue is visible and populate it
+			var message = this._upload_progress_format(queued_file.id, queued_file.name, 0.0);
+			var queue = $('#'+queued_file.queue_id);
+			queue.show().find('ul').append(message);
+
+			// append it to the queue
+			this.upload_queue.push(queued_file);
+
+			// if the queue isn't being processed, start it
+			if (this.upload_queue_in_progress == 0)
+				this._upload_queued_file();
+		},
+
+		// process the next file in the upload queue; we always
+		// route uploads through the queue even if there is only
+		// one
+		'_upload_queued_file': function () {
+			// if the queue is empty, there is nothing to do
+			if (this.upload_queue.length == 0)
+				return;
+
+			var that = this;
+			var queued_file = this.upload_queue.shift();	// pluck off the first item
+			console.log('uploading next file', queued_file);
+
+			// an upload is in progress
+			this.upload_queue_in_progress++;
 
 			// create a customized XHR that includes progress
-			var form_data = new FormData(parent_form[0]);
 			var jqXHR = this.ajax({
 				// the actual data
-				data: form_data,
+				data: queued_file.form_data,
 				contentType: false,
 				processData: false,
 
-				url: parent_form[0].action,
+				url: queued_file.action,
 
 				// custom XHR
 				xhr: function() {
 					var custom_xhr = $.ajaxSettings.xhr();
 					if (custom_xhr.upload)
 						custom_xhr.upload.addEventListener('progress', function (e) {
-							return that._upload_progress(e, that);
+							return that._upload_progress(e, that, queued_file);
 						}, false);
 					return custom_xhr;
 				}
-			}, this._upload_success(success), this._upload_failure(failure), show_busy, false);
+			}, this._upload_success(queued_file), this._upload_failure(queued_file), queued_file.show_busy, false);
 
-			// hide the input field (we are hard-coding for 1 file right now)
-			// and show the list
-			$('#div_id_uploaded_file').hide();
-			$('#sculpt_uploaded_file_list').show();
+			// if this is a single-upload item, hide the upload
+			// form
+			//****TODO
 
-			// build an item to go in the list
-			this.upload_queue = [{ name: file_list[0].name, size: file_list[0].size, form: parent_form }];
-			var message = this._upload_progress_format(file_list[0].name, 0.0);
-			$('#uploaded_file_list ul').html(message);
-		},
-
-		// process the upload queue
-		'_upload_queued_file': function () {
+			// we don't trigger the queue to be processed again
+			// until something happens with the current upload
 		},
 
 		// when an upload has a progress event
 		// NOTE: "this" refers to the XHRupload object
-		'_upload_progress': function (e, that) {
+		'_upload_progress': function (e, that, queued_file) {
+			console.log('uploading progress', e, that, queued_file);
 			if (e.lengthComputable)
 			{
 				var percentage = Math.round((e.loaded * 100.0) / e.total);
-				var message = that._upload_progress_format(that.upload_queue[0].name, percentage);
-				$('#uploaded_file_list ul').html(message);
+				var message = that._upload_progress_format(queued_file.id, queued_file.name, percentage);
+				var queue_item = $('#'+queued_file.id);
+				queue_item.replaceWith(message);
 			}
+			if (typeof(queued_file.progress) == "function")
+				queued_file.progress(e, that, queued_file);
 		},
 
-		// when an upload succeeds
-		'_upload_success': function(success_fn){
+		// when an upload succeeds; this is actually
+		// a function generator
+		'_upload_success': function(queued_file){
 			var inner = function (success, data, status, message, jqXHR) {
 				// NOTE: "this" refers to window, and the function signature
 				// is set by Sculpt.ajax, so we resort to an explicit reference
 				// to Sculpt. *sigh*
 				var that = Sculpt;
 
+				console.log('uploading success', queued_file);
+
 				// update the progress message to show 100%
-				var message = that._upload_progress_format(that.upload_queue[0].name, 100.0);
-				$('#uploaded_file_list ul').html(message);
+				var message = that._upload_progress_format(queued_file.id, queued_file.name, 100.0);
+				var queue_item = $('#'+queued_file.id);
+				queue_item.replaceWith(message);
+
+				// update the visible HTML with the newly-known
+				// hash
+				queue_item.attr('data-file-hash', data.results.file.hash);
 
 				// write the file ID into the hidden field
-				var target_form_id = that.upload_queue[0].form.attr('data-target-form-id');
-				var target_field_id = that.upload_queue[0].form.attr('data-target-field-id');
-				$('#'+target_field_id)[0].value = data.results.file.hash;
+				var target_field = $('#'+queued_file.target_field_id)
+				if (queued_file.allow_multiple)
+				{
+					var hash_list = target_field[0].value.split(',');
+					var i;
+					for (i = 0; i < hash_list.length; i++)
+						if (hash_list[i] == data.result.file.hash)
+							break;	// already there, stop
+					if (i >= hash_list.length)
+					{
+						// not present, append it
+						hash_list.push(data.result.file.hash);
+						target_field[0].value = hash_list.join(',');
+					}
+				}
+				else
+				{
+					// single value only, replace it, but if the value
+					// was already filled, find that entry in the queue
+					// block and remove it
+					if (target_field[0].value > '')
+						$('#'+queued_file.queue_id+' li[data-file-hash='+target_field[0].value+']').remove();
+					target_field[0].value = data.results.file.hash;
+				}
 
-				if (typeof(success_fn) == "function")
-					success_fn(success, data, status, message, jqXHR);
+				// use any custom callback provided
+				if (typeof(queued_file.success) == "function")
+					queued_file.success(success, data, status, message, jqXHR);
+
+				// we've finished with an upload
+				that.upload_queue_in_progress--;
+
+				// process the queue again so the next file
+				// will go
+				that._upload_queued_file();
+
+				// and allow the main AJAX response handler to
+				// process any toast/modal/updates
+				return true;
 			};
 			return inner;
 		},
 
-		// when an upload fails
-		'_upload_failure': function (failure_fn) {
+		// when an upload fails; this is actually
+		// a function generator
+		'_upload_failure': function (queued_file) {
 			var inner = function (success, data, status, message, jqXHR) {
-				console.error('upload failure');
-				if (typeof(failure_fn) == "function")
-					failure_fn(success, data, status, message, jqXHR)
+				console.error('uploading failure', queued_file, message);
+
+				// if we have an ID for this item (and we should)
+				// remove it from the queue block
+				$('#'+queued_file.id).remove();
+
+				// use any custom callback provided
+				if (typeof(queued_file.failure) == "function")
+					queued_file.failure(success, data, status, message, jqXHR)
+
+				// we've finished with an upload
+				that.upload_queue_in_progress--;
+
+				// process the queue again so the next file
+				// will go
+				that._upload_queued_file();
 			};
 			return inner;
 		},
 
 		// formatting a progress message
-		'_upload_progress_format': function (filename, percentage) {
+		'_upload_progress_format': function (id, filename, percentage) {
 			if (percentage < 100.0)
 			{
 				percentage = Math.round(percentage * 10.0) * 0.1;
-				return this.messages.ajax_upload_item_incomplete.replace(/__item_filename__/g, filename).replace(/__item_progress_percent__/g, percentage.toString());
+				return this.messages.ajax_upload_item_incomplete.replace(/__item_id__/g, id).replace(/__item_filename__/g, filename).replace(/__item_progress_percent__/g, percentage.toString());
 			}
 			else
-				return this.messages.ajax_upload_item_complete.replace(/__item_filename__/g, filename);
+				return this.messages.ajax_upload_item_complete.replace(/__item_id__/g, id).replace(/__item_filename__/g, filename);
 		},
 
 		//
@@ -1503,8 +1712,8 @@
 			'ajax_form_error_item':			'<li>__error_item__</li>',
 			'ajax_field_error':				'<ul>__error_list__</ul>',
 			'ajax_field_error_item':		'<li>__error_item__</li>',
-			'ajax_upload_item_incomplete':	'<li>Uploading __item_filename__ <span class="upload_progress">__item_progress_percent__%</span></li>',
-			'ajax_upload_item_complete':	'<li>Uploaded __item_filename__</li>'
+			'ajax_upload_item_incomplete':	'<li id="__item_id__">Uploading __item_filename__ <span class="upload_progress">__item_progress_percent__%</span></li>',
+			'ajax_upload_item_complete':	'<li id="__item_id__">Uploaded __item_filename__</li>'
 		},
 
 		//

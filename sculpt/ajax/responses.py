@@ -150,6 +150,11 @@ class AjaxMixedResponse(JsonResponse):
         # do HTML updates
         if show_updates and 'updates' in response_data:
             response['html'] = cls.render_html_templates(context, response_data['updates'])
+
+        # if we are given data results, pass those along
+        # without modification
+        if 'results' in response_data:
+            response['results'] = response_data['results']
             
         # now create the response based on what we have
         return AjaxMixedResponse(**response)

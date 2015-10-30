@@ -270,8 +270,8 @@ class AjaxResponseView(AjaxView):
     # shortcut to render to string using the defined templates
     # for modal, toast, and updates, and return the correct
     # AJAX response
-    def prepare_response(self, context = None):
-        if context == None:
+    def prepare_response(self, context = None, results = None):
+        if context is None:
             context = {}
         if not isinstance(context, Context):
             # must have a Context instance to render templates
@@ -285,6 +285,8 @@ class AjaxResponseView(AjaxView):
             response_data['toast'] = self.toast
         if self.updates:
             response_data['updates'] = self.updates
+        if results:
+            response_data['results'] = results
             
         return AjaxMixedResponse.create(context, response_data)
 
@@ -422,6 +424,17 @@ class AjaxFormView(AjaxResponseView):
     def process_partial_form(self, form):
         pass
     
+    # this is a wrapper around the Django render function,
+    # in case GET requests need to return AJAX responses
+    def render(self, context):
+        if self.template_name is None and (self.updates is not None or self.modal is not None or self.toast is not None):
+            # this is intended to be an AJAX resopnse
+            return self.prepare_response(context)
+
+        else:
+            # this is a standard HTML response
+            return render(self.request, self.template_name, context)
+
     #
     # boilerplate, so you don't have to keep writing it
     #
@@ -456,7 +469,7 @@ class AjaxFormView(AjaxResponseView):
             return rv
         
         # render the template and give back a response
-        return render(request, self.template_name, context)
+        return self.render(context)
         
     # basic POST handler: validate the form
     # and dispatch to a success handler
@@ -743,6 +756,17 @@ class AjaxMultiFormView(AjaxView):
                 if hasattr(self, method_name) and callable(getattr(self, method_name)):
                     return getattr(self, method_name)(form, form_alias)
     
+    # this is a wrapper around the Django render function,
+    # in case GET requests need to return AJAX responses
+    def render(self, context):
+        if self.template_name is None and (self.updates is not None or self.modal is not None or self.toast is not None):
+            # this is intended to be an AJAX resopnse
+            return self.prepare_response(context)
+
+        else:
+            # this is a standard HTML response
+            return render(self.request, self.template_name, context)
+
     #
     # boilerplate, so you don't have to keep writing it
     #
@@ -829,7 +853,7 @@ class AjaxMultiFormView(AjaxView):
                 return rv
         
         # render the template and give back a response
-        return render(request, self.template_name, context)
+        return self.render(context)
         
     # basic POST handler: validate the form
     # and dispatch to a success handler
