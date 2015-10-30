@@ -419,10 +419,18 @@
 
 				// otherwise invoke the success handler if we have
 				// a recognized success response (5b, 5c)
+				//
+				// NOTE: we check for results data as well because
+				// if results are present we invoke the success
+				// handler FIRST, and only end up here if the handler
+				// asks for regular processing; we don't want to
+				// invoke the handler twice
+				//
 				if (invoke_success)
 				{
-					if (typeof(success) == "function")
-						success(true, data, status, null, jqXHR);
+					if (data.results == undefined)
+						if (typeof(success) == "function")
+							success(true, data, status, null, jqXHR);
 					return;
 				}
 
@@ -1248,7 +1256,7 @@
 		// when an upload has a progress event
 		// NOTE: "this" refers to the XHRupload object
 		'_upload_progress': function (e, that, queued_file) {
-			console.log('uploading progress', e, that, queued_file);
+			//console.log('uploading progress', e, that, queued_file);
 			if (e.lengthComputable)
 			{
 				var percentage = Math.round((e.loaded * 100.0) / e.total);
