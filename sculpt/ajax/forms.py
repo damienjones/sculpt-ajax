@@ -36,7 +36,9 @@ class CrispyMixin(object):
         self.setup_form_helper(helper = self.helper)
 
     def setup_form_helper(self, helper):
-        pass
+        # Django doesn't write FORM tags, but crispy does
+        if self.form_action is not None:
+            helper.form_action = self.form_action
 
 
 # form mixin class that provides enhanced validation with two
@@ -561,7 +563,22 @@ class NonField(object):
 #
 class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
 
+    # a common use pattern is to be able to redirect a form
+    # submission to another place, even though most of the
+    # time we want to submit to the same URL via POST; rather
+    # than force this to be rewritten, we include the ability
+    # here
+    form_action = None
+
     def __init__(self, *args, **kwargs):
+        # pluck off the form_action if given
+        # NOTE: must be given as a keyword argument; we
+        # also do nothing if the argument is not explicitly
+        # given, in case a derived class hard-codes it (but
+        # that would be a poor choice)
+        if 'form_action' in kwargs:
+            self.form_action = kwargs.pop('form_action')
+
         # first, go ahead and let the Django Form class set
         # itself up; this loops through the field definitions
         # on the class object and creates field instances,
@@ -579,7 +596,7 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         
         for name, field in self.fields.iteritems():
             self.rewrite_field_error_messages(name, field, form_specific_errors)
-        
+
         # return the original result
         return result
 

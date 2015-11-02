@@ -758,7 +758,7 @@
 				var queued_item = {
 					name: e.target.files[0].name,
 					action: form.action,
-					form_data: FormData(form),
+					form_data: new FormData(form),
 					queue_id: $(form).attr('data-queue-id'),
 					target_field_id: $(form).attr('data-target-field-id'),
 					allow_multiple: $(form).attr('data-allow-multiple')
