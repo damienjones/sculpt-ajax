@@ -749,6 +749,7 @@ class AjaxMultiFormView(AjaxView):
     #
     def process_partial_form(self, form, form_alias):
         if form_alias in self.form_classes:
+            method_name = 'process_partial_form_%s' % form_alias
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
                 return getattr(self, method_name)(form)
             else:
