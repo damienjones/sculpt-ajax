@@ -360,6 +360,14 @@ class AjaxFormView(AjaxResponseView):
     # used.
     #
     render_only = False
+
+    # sometimes we want to do all of our processing as though
+    # it's partial validation, but occasionally the browser
+    # may do a full submission if the user presses RETURN;
+    # enable this setting to force all submissions to be
+    # treated as partial submissions
+    #
+    always_partially_validate = False
     
     #
     # override these to provide custom handling for your form
@@ -485,7 +493,7 @@ class AjaxFormView(AjaxResponseView):
         # not been validated
         if '_partial' in request.GET:
             self._partial_validation_last_field = request.GET['_partial']
-        
+
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, self.response_base_class):
@@ -501,6 +509,13 @@ class AjaxFormView(AjaxResponseView):
         if isinstance(rv, self.response_base_class):
             return rv
         
+        # we may have explicitly flagged all submissions to be
+        # treated as partial validation
+        if self.always_partially_validate and not self.is_partial_validation:
+            last_field = form.fields.keys()[-1]
+            self._partial_validation_last_field = '%s-%s' % (form.prefix, last_field) if form.prefix is not None else last_field
+            print 'forcing partial validation'
+
         if self.is_partial_validation:
             # we're only doing partial validation
             is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)

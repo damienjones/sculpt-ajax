@@ -114,7 +114,7 @@ class EnhancedValidationMixin(object):
         if self.prefix != None and last_field.startswith(self.prefix+'-'):
             last_field = last_field[len(self.prefix)+1:]
         
-        # step 1. identify all the fields up to, and
+        # step 2. identify all the fields up to, and
         # including, the last field to validate
         full_field_list = self.fields.keys()
         if last_field not in full_field_list:
