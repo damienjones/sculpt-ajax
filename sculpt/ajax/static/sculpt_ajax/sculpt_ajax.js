@@ -34,6 +34,8 @@
 		// _sculpt_ajax_post - if added to links, forces them to AJAX POST (supports responses)
 		// _sculpt_ajax_busy - if added to links, forces AJAX request to show busy indicator
 		// _sculpt_modal_dismiss - if added to links, forces modal to close first (_sculpt_ajax_post required)
+		// _sculpt_proxy_click - when this item is clicked, it triggers a click event on data-target-id
+		// _sculpt_proxy_submit - when this item is clicked, it triggers a submit event on data-target-id
 		// _sculpt_decorative - if added to links, swallows clicks (useful for prototyping)
 
 		'ajax': function (opts, success, failure, show_busy, fail_silently) {
@@ -782,6 +784,13 @@
 			$(document).on('click', '._sculpt_proxy_click', function(e){
 				var target = $(this).attr('data-target-id');
 				$('#'+target).click();
+			});
+
+			// and sometimes we want links to submit forms even when
+			// the link/button is nowhere near that form
+			$(document).on('click', '._sculpt_proxy_submit', function(e){
+				var target = $(this).attr('data-target-id');
+				$('#'+target).submit();
 			});
 
 			// file drag-and-drop events
