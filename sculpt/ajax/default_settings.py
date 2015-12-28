@@ -8,6 +8,14 @@
 # are secured
 SCULPT_AJAX_DUMP_REQUESTS = False
 
+# when IntegrityError exceptions are raised in requests,
+# we may want to report these to the user as database
+# access conflicts (the most likely cause); disabling
+# this will cause them to be treated like every other
+# error
+SCULPT_AJAX_REPORT_AJAX_DATABASE_ERRORS = True
+SCUKPT_AJAX_REPORT_HTML_DATABASE_ERRORS = True
+
 # When processing forms we want to keep all the actual
 # error messages in a centralized file to make them easier
 # to find, but we also need to be able to override and

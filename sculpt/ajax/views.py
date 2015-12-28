@@ -1,3 +1,4 @@
+from django.db import transaction, DatabaseError
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template import RequestContext, Context
@@ -115,9 +116,22 @@ class AjaxView(base_view_class):
     def dispatch(self, request, *args, **kwargs):
 
         # if we know this call is not AJAX, we don't need to do
-        # any wrapping of the output
+        # any wrapping of the output except possibly to catch
+        # DatabaseError exceptions
         if not self.is_ajax:
-            return super(AjaxView, self).dispatch(request, *args, **kwargs)
+            try:
+                return super(AjaxView, self).dispatch(request, *args, **kwargs)
+            except DatabaseError, e:
+                if settings.SCULPT_AJAX_REPORT_HTML_DATABASE_ERRORS:
+                    # give back a nice formatted response, HTML-style
+                    from sculpt.ajax.messaging import render_message
+                    response = render_message(request, 'error', 'database-contention', is_ajax = False, response_code = 500)
+                    return response
+
+                else:
+                    # we're not supposed to catch these, re-raise the
+                    # error in the original context
+                    raise
             
         # otherwise it's a post (or at least something we're
         # supposed to wrap); trap exceptions
@@ -171,6 +185,14 @@ class AjaxView(base_view_class):
             # we use the regular Django settings.DEBUG because the same
             # switch controls debug backtrace display for page requests
             # too, and is always OFF in production
+            #
+            # NOTE: this debug settings takes precedence over whether the
+            # exception is a database error (DatabaseError) so that
+            # the backtrace can be presented. This is important because
+            # DatabaseError can also be thrown when a unique constraint
+            # is violated, not just when a transaction can't be completed
+            # in a timely fashion.
+            #
             if settings.DEBUG:
                 # sys.exc_info() returns a tuple (type, exception object, stack trace)
                 # traceback.format_exception() formats the result in plain text, as a list of strings
@@ -180,7 +202,19 @@ class AjaxView(base_view_class):
                 if settings.SCULPT_AJAX_DUMP_REQUESTS:
                     print backtrace_text
                 return AjaxExceptionResponse({ 'code': 0, 'title': e.__class__.__name__, 'message': str(e), 'backtrace': backtrace_text })
+
+            elif isinstance(e, DatabaseError) and settings.SCULPT_AJAX_REPORT_AJAX_DATABASE_ERRORS:
+                # NOT in debug mode, but this is an DatabaseError;
+                # we don't directly log these and and we at least
+                # report to the user something more generic
+                if settings.SCULPT_AJAX_DUMP_REQUESTS:
+                    print 'AJAX DatabaseError:', str(e)
                 
+                # give back a nice formatted response, AJAX-style
+                from sculpt.ajax.messaging import render_message
+                response = render_message(request, 'error', 'database-contention', is_ajax = True, response_code = 500)
+                return response
+
             else:
                 # NOT in debug mode, reveal NOTHING
                 #
@@ -215,6 +249,25 @@ class AjaxView(base_view_class):
                 if settings.SCULPT_AJAX_DUMP_REQUESTS:
                     print repr(response)
                 return AjaxExceptionResponse(response)
+
+
+# sometimes we need GET or POST requests to be complete
+# atomic transactions; for cases where we aren't otherwise
+# changing the GET or POST operations, make it easy to
+# do this
+#
+class AtomicGetMixin(object):
+
+    @transaction.atomic
+    def get(self, *args, **kwargs):
+        return super(AtomicGetMixin, self).get(*args, **kwargs)
+
+
+class AtomicPostMixin(object):
+
+    @transaction.atomic
+    def post(self, *args, **kwargs):
+        return super(AtomicPostMixin, self).post(*args, **kwargs)
 
 
 # an AJAX response-generating view
