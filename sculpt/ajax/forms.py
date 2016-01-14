@@ -373,7 +373,7 @@ class EnhancedValidationMixin(object):
         if self.are_fields_present(field_list):
             # only do this test if all the required fields
             # are supposed to be present
-            resolved_values = self.resolve_field_values(field_list)
+            resolved_values = self.resolve_field_values(field_list, require_fields = False)
             if allow_equality_positions is None:
                 allow_equality_positions = []
 
