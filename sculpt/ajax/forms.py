@@ -129,7 +129,7 @@ class EnhancedValidationMixin(object):
             field_list = full_field_list[:full_field_list.index(last_field)+1]  # raises ValueError if last_field is not in the list
         
         self._partial_validation_field_set = set(field_list)
-        
+
         # step 2. do all the validation normally
         # this will invoke the form's clean() method,
         # which may contain inter-field validation,
@@ -157,8 +157,15 @@ class EnhancedValidationMixin(object):
     # cleaned_data
     # (this is called internally by many of the rules)
     def are_fields_valid(self, field_list):
+        # all fields must be expected to be present in order
+        # for them to be valid; there are valid cases of
+        # multi-field rules with optional fields occurring
+        # after the last-submitted field being ignored and
+        # this needs to be addressed
+        if not self.are_fields_present(field_list):
+            return False
         for field_name in field_list:
-            if field_name not in self.cleaned_data:
+            if field_name not in self.cleaned_data or field_name in self._errors:
                 return False
         return True
     
