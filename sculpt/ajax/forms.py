@@ -402,6 +402,8 @@ class EnhancedValidationMixin(object):
                             # this is ugly code repetition
                             'fieldname1': self.fields[field_list[i]].label if not isinstance(field_list[i], NonField) else field_list[i].label(self),
                             'fieldname2': self.fields[field_list[i+1]].label if not isinstance(field_list[i+1], NonField) else field_list[i+1].label(self),
+                            'field_value1': resolved_values[i],
+                            'field_value2': resolved_values[i+1],
                         }
                     label = self.resolve_field_labels([ field_list[i], field_list[i+1] ])
                     self.add_error_message(error_name, pair_error_code, params = params, assign_to_field = field_list[i], field_label = label)
