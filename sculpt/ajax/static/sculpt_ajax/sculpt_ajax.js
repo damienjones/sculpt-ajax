@@ -31,6 +31,7 @@
 		// _sculpt_ajax_autoclear - clear form on success
 		// _sculpt_ajax_upload - form contains upload field
 		// _sculpt_ajax_live - field is live-updated to the server; requires extra attributes
+		// _sculpt_ajax_live_cached - AJAX results for this field and value are cached automatically
 		// _sculpt_ajax_post - if added to links, forces them to AJAX POST (supports responses)
 		// _sculpt_ajax_busy - if added to links, forces AJAX request to show busy indicator
 		// _sculpt_modal_dismiss - if added to links, forces modal to close first (_sculpt_ajax_post required)
@@ -199,7 +200,7 @@
 			// reason for returning the jqXHR is to allow upload progress monitoring.
 			// This is now irrelevant as we do file upload monitoring internally.
 			//
-			// Zach Stevenson 7/10/2014  Added a flag to fail silently.  There are situations
+			// Zach Stevenson 7/10/2014  Added a flag to fail silently. There are situations
 			// like predictive search when you are doing abort() on the ajax object when you
 			// don't want it to pop up a modal saying "You canceled the operation".
 			// By marking this you know that you are risking possibly unexpected behaviour.
@@ -384,6 +385,15 @@
 						continue_processing = success(true, data, status, null, jqXHR);
 					if (!continue_processing)
 						return;	// STOP NOW
+
+					// otherwise indicate we do want to invoke
+					// the success handler; we will actually not
+					// trigger it again (we check for results)
+					// but this will force the code to exit before
+					// firing the garbled-response message even if
+					// the remainder of the response contains no
+					// other actions (HTML, toast, modal)
+					invoke_success = true;
 				}
 
 				// the remaining cases are not mutually-exclusive
@@ -714,6 +724,8 @@
 		// processing; if it returns a non-zero value, the form will
 		// not be submitted to the server.
 		//
+		// These callbacks will also be checked on live-update fields.
+		//
 		'register_form_handlers': function (f_id, prepare, success, failure, show_busy) {
 			this.auto_form_handlers[f_id] = { 'id': f_id, 'prepare': prepare, 'success': success, 'failure': failure, 'show_busy': show_busy };
 		},
@@ -781,14 +793,14 @@
 			// for hidden file input fields, honor a proxy click
 			// NOTE: this can be used for more than just upload fields,
 			// hence the generic name
-			$(document).on('click', '._sculpt_proxy_click', function(e){
+			$(document).on('click', '._sculpt_proxy_click', function(e) {
 				var target = $(this).attr('data-target-id');
 				$('#'+target).click();
 			});
 
 			// and sometimes we want links to submit forms even when
 			// the link/button is nowhere near that form
-			$(document).on('click', '._sculpt_proxy_submit', function(e){
+			$(document).on('click', '._sculpt_proxy_submit', function(e) {
 				var target = $(this).attr('data-target-id');
 				$('#'+target).submit();
 			});
@@ -1563,10 +1575,9 @@
 		// to the server as it is being edited.
 		//
 
-		'live_update_focused_field': null,
-		'live_update_was_changed': false,
-		'live_update_key_timer': null,
+		'live_update_key_timers': {},
 		'live_update_default_delay': 250,	// quarter-second response rate
+		'live_update_cache': {},
 
 		'_init_live_update': function () {
 			var that = this;
@@ -1575,22 +1586,24 @@
 				// (in case we see the focus on the new field before
 				// the blur on the old field, which happens in some
 				// old browsers)
-				if (that.live_update_focused_field != null)
-					that._live_update_blur();
+				// if (that.live_update_focused_field != null)
+				// 	that._live_update_blur();
 
 				// set up the new field
-				that.live_update_focused_field = this;
+				// that.live_update_focused_field = this;
+				$(e.target).attr('data-live-update-was-changed', '0');
 
 			}).on('keydown.sculpt.liveupdate', '._sculpt_ajax_live', function (e) {
 				// we need to use keydown events because change doesn't
 				// fire until the user tabs out of the field
 
 				// mark this field as changed
-				that.live_update_was_changed = true;
+				$(e.target).attr('data-live-update-was-changed', '1');
+				// that.live_update_was_changed = true;
 
 				// for change events, we don't submit right away, but
 				// we wait for some period
-				var delay = parseInt($(this).attr('data-live-update-delay'), 10);	// make sure we parse as base 10, thank you
+				var delay = parseInt($(e.target).attr('data-live-update-delay'), 10);	// make sure we parse as base 10, thank you
 
 				// apply default if the field doesn't set a delay
 				if (isNaN(delay))
@@ -1598,55 +1611,159 @@
 
 				// only set up the timer if we have a delay
 				if (delay != 0)
-					that.live_update_key_timer = window.setTimeout(function () {
-						that._live_update_submit();		// we know it's changed, submit it
+				{
+					// make sure to clear any pending timer
+					if (that.live_update_key_timers[e.target.id] != undefined)
+						window.clearTimeout(that.live_update_key_timers[e.target.id]);
+					// set a new timer to submit this field
+					that.live_update_key_timers[e.target.id] = window.setTimeout(function () {
+						delete that.live_update_key_timers[e.target.id];
+						that._live_update_submit(e.target);		// we know it's changed, submit it
 					}, delay);
+				}
 
 			}).on('focusout.sculpt.liveupdate', '._sculpt_ajax_live', function (e) {
-				that._live_update_blur();
+				that._live_update_blur(e.target);
 
 			}).on('change.sculpt.liveupdate', 'select._sculpt_ajax_live, input[type=checkbox]._sculpt_ajax_live', function (e) {
-				that._live_update_submit();
+				that._live_update_submit(e.target);
 
 			});
 		},
 
-		'_live_update_blur': function () {
-			if (this.live_update_focused_field != null)
-			{
-				// only bother to submit if the field was actually changed
-				if (this.live_update_was_changed)
-					this._live_update_submit();
+		'_live_update_blur': function (field) {
+			if ($(field).attr('data-live-update-was-changed') == '1')
+				this._live_update_submit(field);
 
-				// make sure we indicate we're no longer tracking any field
-				this.live_update_focused_field = null;
-			}
+			$(field).attr('data-live-update-was-changed', '0');
 		},
 
-		'_live_update_submit': function () {
-			var jq_field = $(this.live_update_focused_field);
+		'_live_update_submit': function (field) {
+			console.log('live submit', field);
+			var jq_field = $(field);
 
 			// clobber the timer if it's still pending
-			if (this.live_update_key_timer != null)
+			if (this.live_update_key_timers[field.id] != null)
 			{
-				window.clearTimeout(this.live_update_key_timer);
-				this.live_update_key_timer = null;
+				window.clearTimeout(this.live_update_key_timers[field.id]);
+				this.live_update_key_timers[field.id] = null;
 			}
 
 			// zap the changed flag; we don't care any more
-			this.live_update_was_changed = false;
+			jq_field.attr('data-live-update-was-changed', '0');
+
+			// special test: this field might not be listed in the auto-
+			// handlers but we might want it to be; we don't perform the
+			// scan in _init_live_update because we want to be able to
+			// catch live-update fields that are loaded later in AJAX
+			// responses, so we test here and add it to the auto-handlers
+			// if it's missing
+			if (!(field.id in this.auto_form_handlers) && jq_field.hasClass('_sculpt_ajax_live_cached'))
+				this.register_form_handlers(field.id, this._live_update_cached_prepare, this._live_update_cached_success, null, false);
 
 			// post the data to the server (automatic responses expected)
-			this.ajax({
-				url: jq_field.attr('data-live-update-action'),
-				data: jq_field.serialize()		// just this one field, please
-			});
+			if (field.id in this.auto_form_handlers)
+			{
+				if (typeof(this.auto_form_handlers[field.id].prepare) == "function")
+					if (this.auto_form_handlers[field.id].prepare(field))
+						return;
+				// submit the field via AJAX and handle the results as indicated
+				this.ajax({
+						url: jq_field.attr('data-live-update-action'),
+						data: jq_field.serialize()		// just this one field, please
+					},
+					this.auto_form_handlers[field.id].success,
+					this.auto_form_handlers[field.id].failure,
+					this.auto_form_handlers[field.id].show_busy
+				);
+			}
+			else
+			{
+				this.ajax({
+					url: jq_field.attr('data-live-update-action'),
+					data: jq_field.serialize()		// just this one field, please
+				});
+			}
 		},
 
+		// some live update fields should cache results from the server
+		// (e.g. predictive search fields) so these functions are used
+		// to wrap the AJAX calls for those fields
+		
+		// prepare function
+		// called from the context of an event handler, so this got
+		// remapped to the object, not to Sculpt
+		'_live_update_cached_prepare': function (focused_field) {
+			var that = Sculpt;
+			var field_id = focused_field.id;
+			var field_value = $(focused_field).val();
+			if (!(focused_field.id in that.live_update_cache))
+				that.live_update_cache[field_id] = {};
+			if (field_value in that.live_update_cache[field_id])
+			{
+				that._ajax_success(
+					that.auto_form_handlers[field_id].success,
+					that.auto_form_handlers[field_id].failure,
+					false,
+					false,
+					that.live_update_cache[field_id][field_value].data,
+					that.live_update_cache[field_id][field_value].status,
+					null		// no jqXHR since this isn't a real request
+				);
+				return true;	// short-circuit the request, we faked it
+			}
+		},
+
+		// success function
+		//
+		// Since our expected success response will include
+		// results, to indicate the name of the field the
+		// data should be cached for, the core AJAX success
+		// handler will invoke our custom success processor
+		// before applying HTML updates or anything else.
+		// We need to make sure we return true from this
+		// handler to allow that processing to apply.
+		//
+		'_live_update_cached_success': function (success, data, status, message, jqXHR) {
+			var that = Sculpt;
+
+			if (!('_cached_result' in data))
+			{
+				// this result hasn't been cached yet
+
+				// make sure these results are for what we
+				// currently have in the field; it's possible
+				// that if the user is typing quickly, we may
+				// get responses back out of order, and we
+				// want to cache, but not otherwise render,
+				// results for a value that no longer matches
+				// what's in the field
+				var field_id = data.results.field_id;
+				var field_value = data.results.field_value;
+
+				// if we got an empty/invalid response from the
+				// server, don't cache it
+				if (field_id == undefined || field_value == '')
+					return true;
+
+				// save the results
+				data._cached_result = true;
+				that.live_update_cache[field_id][field_value] = {
+					data: data,
+					status: status
+				};
+
+				// skip processing if the current value differs
+				if ($('#'+field_id).val() != field_value)
+					return false;
+			}
+			return true;
+		},
 
 		//
 		// UTILITIES
 		//
+
 		'escape_html': function (s) {
 			return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 		},
@@ -1736,8 +1853,8 @@
 		//
 		// INITIALIZATION
 		//
-		// Just invoke this once.
-		//
+
+		// just invoke this once
 		'init': function () {
 			this.extract_cookies();
 			this._wrap_console();
