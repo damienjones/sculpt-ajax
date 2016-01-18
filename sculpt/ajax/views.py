@@ -664,6 +664,8 @@ class AjaxFormView(AjaxResponseView):
 #     form_attrs    a dict of additional parameters to
 #                   pass to the form object during creation
 #                   (optional)
+#     form_type     used in place of the form_alias when
+#                   invoking named form handler methods
 #
 # This class does not derive from AjaxFormView but rather
 # directly from AjaxView. There is significant code overlap,
@@ -744,7 +746,7 @@ class AjaxMultiFormView(AjaxView):
     #
     def prepare_context(self, context, initial, form_alias):
         if form_alias in self.form_classes:
-            method_name = 'prepare_context_%s' % form_alias
+            method_name = 'prepare_context_%s' % self.form_classes.get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
                 return getattr(self, method_name)(context, initial)
             else:
@@ -776,7 +778,7 @@ class AjaxMultiFormView(AjaxView):
     #
     def prepare_form(self, form, form_alias):
         if form_alias in self.form_classes:
-            method_name = 'prepare_form_%s' % form_alias
+            method_name = 'prepare_form_%s' % self.form_classes.get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
                 return getattr(self, method_name)(form)
             else:
@@ -800,7 +802,7 @@ class AjaxMultiFormView(AjaxView):
     #
     def process_form(self, form, form_alias):
         if form_alias in self.form_classes:
-            method_name = 'process_form_%s' % form_alias
+            method_name = 'process_form_%s' % self.form_classes.get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
                 return getattr(self, method_name)(form)
             else:
@@ -817,7 +819,7 @@ class AjaxMultiFormView(AjaxView):
     #
     def process_partial_form(self, form, form_alias):
         if form_alias in self.form_classes:
-            method_name = 'process_partial_form_%s' % form_alias
+            method_name = 'process_partial_form_%s' % self.form_classes.get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
                 return getattr(self, method_name)(form)
             else:
