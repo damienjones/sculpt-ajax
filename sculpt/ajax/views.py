@@ -915,6 +915,10 @@ class AjaxMultiFormView(AjaxView):
             form = form_class(initial = initials[form_alias], **form_attrs)
             context['forms'][form_alias] = form
 
+            # fill in form type, if specified
+            if isinstance(form_data, dict) and 'form_type' in form_data:
+                form.form_type = form_data['form_type']
+
             # extra step: apply Crispy helper attributes
             for k in helper_attrs:
                 setattr(form.helper, k, helper_attrs[k])
@@ -992,6 +996,10 @@ class AjaxMultiFormView(AjaxView):
             form = form_class(request.POST, request.FILES, **form_attrs)
         else:
             form = form_class(request.POST, **form_attrs)
+
+        # fill in form type if specified, as a convenience
+        if isinstance(form_data, dict) and 'form_type' in form_data:
+            form.form_type = form_data['form_type']
 
         rv = self.prepare_form(form, form_alias)
         if isinstance(rv, self.response_base_class):

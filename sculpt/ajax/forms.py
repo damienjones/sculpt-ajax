@@ -31,14 +31,24 @@ class CrispyMixin(object):
         from crispy_forms.helper import FormHelper
 
         super(CrispyMixin, self).__init__(*args,**kwargs)
+
+        # create a default FormHelper object
         self.helper = FormHelper(self)
         self.helper.form_id = 'id_' + (self.prefix if self.prefix else self.__class__.__name__)
+
+        if self.form_action is not None:
+            # copy over form_action so Crispy can write it;
+            # we do this here rather than in setup_form_helper
+            # so that setup_form_helper doesn't have to worry
+            # about calling the base class implementation
+            self.helper.form_action = self.form_action
+
+        # give derived classes a chance to modify the helper,
+        # especially for providing layout
         self.setup_form_helper(helper = self.helper)
 
     def setup_form_helper(self, helper):
-        # Django doesn't write FORM tags, but crispy does
-        if self.form_action is not None:
-            helper.form_action = self.form_action
+        pass
 
 
 # form mixin class that provides enhanced validation with two
