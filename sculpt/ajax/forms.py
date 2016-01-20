@@ -1,4 +1,5 @@
 from django import forms
+from django.utils.safestring import mark_safe
 from django.utils.translation import ungettext_lazy
 
 from sculpt.ajax import settings
@@ -814,6 +815,32 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         if hasattr(self.fields[field_name].widget, 'choices'):
             self.fields[field_name].widget.choices = choices
 
+    # a very, very common use case is taking a list of
+    # tuples from one source and prepending a default,
+    # "empty" choice at the beginning; Django only
+    # implements this in the ModelField instance and
+    # that's stupid
+    @classmethod
+    def default_choice(cls, choices, default_value = '', default_label = ''):
+        combined_choices = [ (default_value, default_label) ]
+        combined_choices.extend(choices)
+        return combined_choices
+
+    # sometimes we just want to mark all the choices
+    # as safe for rendering; since this modifies the
+    # entries in place, it only works on choices that
+    # are lists, not tuples
+    @classmethod
+    def safe_choices(cls, choices):
+        for i in range(len(choices)):
+            choice = choices[i]
+            if isinstance(choice[1], list):
+                for j in range(len(choice[1])):
+                    choice[1][j] = ( choice[1][j][0], mark_safe(choice[1][j][1]) )
+            else:
+                choices[i] = ( choice[0], mark_safe(choice[1]) )
+
+        return choices
 
 # a form mix-in that automatically includes the form alias field
 # so that AjaxMultiFormView can dispatch submission to the correct
