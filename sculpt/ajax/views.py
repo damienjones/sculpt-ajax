@@ -477,6 +477,21 @@ class AjaxFormView(AjaxResponseView):
     #
     def process_form(self, form):
         pass
+
+    # when a form is determined to be invalid, it might
+    # still be desirable to do some processing before
+    # returning an error response
+    #
+    # NOTE: a normal return value should be None, but
+    # if you return a JsonResponse type, processing
+    # will stop and that response sent back to the user;
+    # you may also return a dict that will be passed as
+    # extra parameters to the AjaxFormErrorResponse
+    # constructor in case you want to provide toast,
+    # HTML updates, or field value updates
+    #
+    def process_invalid_form(self, form):
+        pass
     
     # when a form is being partially validated you may
     # want to do something (and usually this is very
@@ -581,14 +596,31 @@ class AjaxFormView(AjaxResponseView):
             # whether we are valid or not, we actually go ahead 
             # and return the form error response, so that existing
             # successfully-validated fields can be highlighted
-            return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'))
+            #
+            # NOTE: if process_partial_form returns a dict, we will
+            # assume these are additional parameters to give to
+            # the AjaxFormErrorResponse constructor
+            #
+            if isinstance(rv, dict):
+                return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'), **rv)
+            else:
+                return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'))
                 
         else:        
             # validate the form and return an error response
             # NOTE: THIS MEANS ALL VALIDATION MUST BE DONE
             # IN THE FORM CLASS
             if not form.is_valid():
-                return AjaxFormErrorResponse(form)
+                # call any processing needed for this invalid form
+                rv = self.process_invalid_form(form)
+                if isinstance(rv, self.response_base_class):
+                    return rv
+
+                # create the error response                
+                if isinstance(rv, dict):
+                    return AjaxFormErrorResponse(form, **rv)
+                else:
+                    return AjaxFormErrorResponse(form)
             
         # a valid form will usually require something to
         # be done with its data
@@ -810,6 +842,28 @@ class AjaxMultiFormView(AjaxView):
                 if hasattr(self, method_name) and callable(getattr(self, method_name)):
                     return getattr(self, method_name)(form, form_alias)
     
+    # when a form is determined to be invalid, it might
+    # still be desirable to do some processing before
+    # returning an error response
+    #
+    # NOTE: a normal return value should be None, but
+    # if you return a JsonResponse type, processing
+    # will stop and that response sent back to the user;
+    # you may also return a dict that will be passed as
+    # extra parameters to the AjaxFormErrorResponse
+    # constructor in case you want to provide toast,
+    # HTML updates, or field value updates
+    #
+    def process_invalid_form(self, form, form_alias):
+        if form_alias in self.form_classes:
+            method_name = 'process_invalid_form_%s' % self.form_classes[form_alias].get('form_type', form_alias)
+            if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                return getattr(self, method_name)(form)
+            else:
+                method_name = 'process_invalid_form__default'
+                if hasattr(self, method_name) and callable(getattr(self, method_name)):
+                    return getattr(self, method_name)(form, form_alias)
+
     # similarly, if you want to process partial form
     # data, provide a process_partial_form_<alias>
     # method; if it returns an AjaxResponse object,
@@ -1017,15 +1071,32 @@ class AjaxMultiFormView(AjaxView):
             # whether we are valid or not, we actually go ahead 
             # and return the form error response, so that existing
             # successfully-validated fields can be highlighted
-            return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'))
-                
+            #
+            # NOTE: if process_partial_form returns a dict, we will
+            # assume these are additional parameters to give to
+            # the AjaxFormErrorResponse constructor
+            #
+            if isinstance(rv, dict):
+                return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'), **rv)
+            else:
+                return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'))
+
         else:        
             # validate the form and return an error response
             # NOTE: THIS MEANS ALL VALIDATION MUST BE DONE
             # IN THE FORM CLASS
             if not form.is_valid():
-                return AjaxFormErrorResponse(form)
-            
+                # call any processing needed for this invalid form
+                rv = self.process_invalid_form(form)
+                if isinstance(rv, self.response_base_class):
+                    return rv
+
+                # create the error response                
+                if isinstance(rv, dict):
+                    return AjaxFormErrorResponse(form, **rv)
+                else:
+                    return AjaxFormErrorResponse(form)
+
         # a valid form will usually require something to
         # be done with its data
         rv = self.process_form(form, form_alias)

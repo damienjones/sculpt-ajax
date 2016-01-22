@@ -398,10 +398,16 @@
 
 				// the remaining cases are not mutually-exclusive
 
-				// case 5b: HTML results
+				// case 5b: HTML/field update results
 				if (data.html != undefined)
 				{
 					this.update_html(data.html);
+					invoke_success = true;
+				}
+
+				if (data.field_updates != undefined)
+				{
+					this.update_fields(data.field_updates);
 					invoke_success = true;
 				}
 
@@ -650,6 +656,22 @@
 					obj.hide();
 
 				//this._init_chosen($('#'+update_item.id)[0]);	// set up chosen on any selects in fresh HTML
+			}
+		},
+
+		// process a list of field updates; this could be done with full
+		// HTML updates of the affected fields, but doing so may change
+		// focus and it can require updating a lot of otherwise-unchanged
+		// HTML, when changing the value is much simpler
+		'update_fields': function (update_list) {
+			var i;
+			var update_item;
+
+			for (i = 0; i < update_list.length; i++)
+			{
+				update_item = update_list[i];
+				var obj = $('#'+update_item.id);
+				obj.val(update_item.value);
 			}
 		},
 
@@ -1138,9 +1160,12 @@
 			//f.find('.error:focus').tooltip('show');
 
 			// it's possible that, along with zero or more errors,
-			// we have toast or HTML updates to apply
+			// we have toast or HTML/field updates to apply
 			if (data.html != undefined)
 				this.update_html(data.html);
+
+			if (data.field_updates != undefined)
+				this.update_fields(data.field_updates);
 
 			if (data.toast != undefined)
 				for (i = 0; i < data.toast.length; i++)

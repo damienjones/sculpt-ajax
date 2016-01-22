@@ -292,15 +292,18 @@ class AjaxErrorResponse(JsonResponse):
 #
 class AjaxFormErrorResponse(JsonResponse):
 
-    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None):
+    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None, field_updates = None):
         # check whether this is a partial validation response
         is_partial = last_field != None
         
         # we shouldn't do this unless we actually have form errors;
         # that would be a programming mistake
-        # NOTE: we'll accept a partial-validation error-free state
-        if not is_partial and not form._errors:
-            raise Exception('attempt to return form errors when there are none')
+        #
+        # NOTE: error-free states are allowed if we're doing either
+        # partial form validation or field updates
+        #
+        if not form._errors and (not is_partial and (field_updates is None or len(field_updates) == 0)):
+            raise Exception('attempt to return form errors when there are none, and not partial validation or field updates')
 
         # we need to format the errors in the form in a way that
         # is suitable for our AJAX handler on the client
@@ -350,6 +353,24 @@ class AjaxFormErrorResponse(JsonResponse):
             results['html'] = AjaxMixedResponse.render_html_templates(context, updates)
         if toast is not None:
             results['toast'] = AjaxMixedResponse.render_toast(context, toast)
+        if field_updates is not None:
+            # we accept a dict-like for field updates but the
+            # client side code always processes them as a list
+            # of dicts; we do it this way so that if the order
+            # matters to you you can use an OrderedDict, but
+            # if it doesn't, you can just pass a dict
+
+            # field updates will usually be for fields in
+            # the current form; if so, we need to prefix
+            # the ID; unfortunately Django doesn't actually
+            # store the computed ID, so we make an assumption
+            # that the auto-generated ID is the one being used
+            # (see )django.forms.fields.BoundField.as_widget())
+            results['field_updates'] = []
+            for k,v in field_updates.iteritems():
+                if k in form.fields:
+                    k = form[k].auto_id     # we must access the BoundField version to get the ID
+                results['field_updates'].append({ 'id': k, 'value': v })
 
         super(AjaxFormErrorResponse, self).__init__(results)
 
