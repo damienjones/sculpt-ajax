@@ -145,24 +145,16 @@ class AjaxMixedResponse(JsonResponse):
 
         # do toast
         if show_toast and 'toast' in response_data:
-            toast_list = response_data['toast']
-            if isinstance(toast_list, dict):
-                toast_list = [ toast_list ]
-            response['toast'] = []
-            for toast in toast_list:
-                toast_template = get_template(toast['template_name'])
-                toast_html = toast_template.render(context)
-                rendered_toast = {
-                        'duration': toast.get('duration', settings.SCULPT_AJAX_DEFAULT_TOAST_DURATION),
-                        'html': toast_html,
-                    }
-                if 'class_name' in toast:
-                    rendered_toast['class_name'] = toast['class_name']
-                response['toast'].append(rendered_toast)
+            response['toast'] = cls.render_toast(context, response_data['toast'])
 
         # do HTML updates
         if show_updates and 'updates' in response_data:
             response['html'] = cls.render_html_templates(context, response_data['updates'])
+
+        # if we are given data results, pass those along
+        # without modification
+        if 'results' in response_data:
+            response['results'] = response_data['results']
             
         # now create the response based on what we have
         return AjaxMixedResponse(**response)
@@ -191,6 +183,25 @@ class AjaxMixedResponse(JsonResponse):
                 rendered_html[i]['html'] = template.render(context)
 
         return rendered_html
+
+    # sometimes we need to render toast, too
+    @classmethod
+    def render_toast(cls, context, toast_list):
+        if isinstance(toast_list, dict):
+            toast_list = [ toast_list ]
+        rendered_toast_list = []
+        for toast in toast_list:
+            toast_template = get_template(toast['template_name'])
+            toast_html = toast_template.render(context)
+            rendered_toast = {
+                    'duration': toast.get('duration', settings.SCULPT_AJAX_DEFAULT_TOAST_DURATION),
+                    'html': toast_html,
+                }
+            if 'class_name' in toast:
+                rendered_toast['class_name'] = toast['class_name']
+            rendered_toast_list.append(rendered_toast)
+
+        return rendered_toast_list
 
 
 # AJAX success response
@@ -281,15 +292,18 @@ class AjaxErrorResponse(JsonResponse):
 #
 class AjaxFormErrorResponse(JsonResponse):
 
-    def __init__(self, form, last_field = None, focus_field = None, error = None):
+    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None, field_updates = None):
         # check whether this is a partial validation response
         is_partial = last_field != None
         
         # we shouldn't do this unless we actually have form errors;
         # that would be a programming mistake
-        # NOTE: we'll accept a partial-validation error-free state
-        if not is_partial and not form._errors:
-            raise Exception('attempt to return form errors when there are none')
+        #
+        # NOTE: error-free states are allowed if we're doing either
+        # partial form validation or field updates
+        #
+        if not form._errors and (not is_partial and (field_updates is None or len(field_updates) == 0)):
+            raise Exception('attempt to return form errors when there are none, and not partial validation or field updates')
 
         # we need to format the errors in the form in a way that
         # is suitable for our AJAX handler on the client
@@ -331,10 +345,32 @@ class AjaxFormErrorResponse(JsonResponse):
                     'last_field': last_field,
                     'focus_field': focus_field,
                 }
-        if error != None:
+        if error is not None:
             results['error'] = to_json(error, [ 'code', 'title', 'message' ])   # just these valid fields
             if 'size' in error:
                 results['error']['size'] = error['size']
+        if updates is not None:
+            results['html'] = AjaxMixedResponse.render_html_templates(context, updates)
+        if toast is not None:
+            results['toast'] = AjaxMixedResponse.render_toast(context, toast)
+        if field_updates is not None:
+            # we accept a dict-like for field updates but the
+            # client side code always processes them as a list
+            # of dicts; we do it this way so that if the order
+            # matters to you you can use an OrderedDict, but
+            # if it doesn't, you can just pass a dict
+
+            # field updates will usually be for fields in
+            # the current form; if so, we need to prefix
+            # the ID; unfortunately Django doesn't actually
+            # store the computed ID, so we make an assumption
+            # that the auto-generated ID is the one being used
+            # (see django.forms.fields.BoundField.as_widget())
+            results['field_updates'] = []
+            for k,v in field_updates.iteritems():
+                if k in form.fields:
+                    k = form[k].auto_id     # we must access the BoundField version to get the ID
+                results['field_updates'].append({ 'id': k, 'value': v })
 
         super(AjaxFormErrorResponse, self).__init__(results)
 

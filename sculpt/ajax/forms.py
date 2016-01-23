@@ -1,4 +1,5 @@
 from django import forms
+from django.utils.safestring import mark_safe
 from django.utils.translation import ungettext_lazy
 
 from sculpt.ajax import settings
@@ -35,8 +36,20 @@ class CrispyMixin(object):
         from crispy_forms.helper import FormHelper
 
         super(CrispyMixin, self).__init__(*args,**kwargs)
+
+        # create a default FormHelper object
         self.helper = FormHelper(self)
         self.helper.form_id = 'id_' + (self.prefix if self.prefix else self.__class__.__name__)
+
+        if self.form_action is not None:
+            # copy over form_action so Crispy can write it;
+            # we do this here rather than in setup_form_helper
+            # so that setup_form_helper doesn't have to worry
+            # about calling the base class implementation
+            self.helper.form_action = self.form_action
+
+        # give derived classes a chance to modify the helper,
+        # especially for providing layout
         self.setup_form_helper(helper = self.helper)
 
     def setup_form_helper(self, helper):
@@ -116,7 +129,7 @@ class EnhancedValidationMixin(object):
         if self.prefix != None and last_field.startswith(self.prefix+'-'):
             last_field = last_field[len(self.prefix)+1:]
         
-        # step 1. identify all the fields up to, and
+        # step 2. identify all the fields up to, and
         # including, the last field to validate
         full_field_list = self.fields.keys()
         if last_field not in full_field_list:
@@ -131,8 +144,8 @@ class EnhancedValidationMixin(object):
             field_list = full_field_list[:full_field_list.index(last_field)+1]  # raises ValueError if last_field is not in the list
         
         self._partial_validation_field_set = set(field_list)
-        
-        # step 2. do all the validation normally
+
+        # step 3. do all the validation normally
         # this will invoke the form's clean() method,
         # which may contain inter-field validation,
         # but those routines should be testing to make
@@ -159,8 +172,15 @@ class EnhancedValidationMixin(object):
     # cleaned_data
     # (this is called internally by many of the rules)
     def are_fields_valid(self, field_list):
+        # all fields must be expected to be present in order
+        # for them to be valid; there are valid cases of
+        # multi-field rules with optional fields occurring
+        # after the last-submitted field being ignored and
+        # this needs to be addressed
+        if not self.are_fields_present(field_list):
+            return False
         for field_name in field_list:
-            if field_name not in self.cleaned_data:
+            if field_name not in self.cleaned_data or field_name in self._errors:
                 return False
         return True
     
@@ -192,6 +212,19 @@ class EnhancedValidationMixin(object):
                 
         return True        
     
+    # Django's normal form validation pattern only places
+    # field values in cleaned_data if they pass single-field
+    # validation rules, but errors triggered by multi-field
+    # rules don't remove errored fields from cleaned_data.
+    # Sometimes it's convenient to extract only the known-
+    # safe fields that result from partial validation.
+    def get_partially_cleaned_data(self):
+        cleaned_data = {}
+        for f in self.fields.keys():
+            if f in self.cleaned_data and self.are_fields_valid([ f ]):
+                cleaned_data[f] = self.cleaned_data[f]
+        return cleaned_data
+
     # add an error message to multiple fields at once
     # error_name is the "name" of the field used when
     # looking up replacement error messages; label is
@@ -375,7 +408,7 @@ class EnhancedValidationMixin(object):
         if self.are_fields_present(field_list):
             # only do this test if all the required fields
             # are supposed to be present
-            resolved_values = self.resolve_field_values(field_list)
+            resolved_values = self.resolve_field_values(field_list, require_fields = False)
             if allow_equality_positions is None:
                 allow_equality_positions = []
 
@@ -404,6 +437,8 @@ class EnhancedValidationMixin(object):
                             # this is ugly code repetition
                             'fieldname1': self.fields[field_list[i]].label if not isinstance(field_list[i], NonField) else field_list[i].label(self),
                             'fieldname2': self.fields[field_list[i+1]].label if not isinstance(field_list[i+1], NonField) else field_list[i+1].label(self),
+                            'field_value1': resolved_values[i],
+                            'field_value2': resolved_values[i+1],
                         }
                     label = self.resolve_field_labels([ field_list[i], field_list[i+1] ])
                     self.add_error_message(error_name, pair_error_code, params = params, assign_to_field = field_list[i], field_label = label)
@@ -565,7 +600,22 @@ class NonField(object):
 #
 class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
 
+    # a common use pattern is to be able to redirect a form
+    # submission to another place, even though most of the
+    # time we want to submit to the same URL via POST; rather
+    # than force this to be rewritten, we include the ability
+    # here
+    form_action = None
+
     def __init__(self, *args, **kwargs):
+        # pluck off the form_action if given
+        # NOTE: must be given as a keyword argument; we
+        # also do nothing if the argument is not explicitly
+        # given, in case a derived class hard-codes it (but
+        # that would be a poor choice)
+        if 'form_action' in kwargs:
+            self.form_action = kwargs.pop('form_action')
+
         # first, go ahead and let the Django Form class set
         # itself up; this loops through the field definitions
         # on the class object and creates field instances,
@@ -583,7 +633,7 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         
         for name, field in self.fields.iteritems():
             self.rewrite_field_error_messages(name, field, form_specific_errors)
-        
+
         # return the original result
         return result
 
@@ -782,6 +832,32 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         if hasattr(self.fields[field_name].widget, 'choices'):
             self.fields[field_name].widget.choices = choices
 
+    # a very, very common use case is taking a list of
+    # tuples from one source and prepending a default,
+    # "empty" choice at the beginning; Django only
+    # implements this in the ModelField instance and
+    # that's stupid
+    @classmethod
+    def default_choice(cls, choices, default_value = '', default_label = ''):
+        combined_choices = [ (default_value, default_label) ]
+        combined_choices.extend(choices)
+        return combined_choices
+
+    # sometimes we just want to mark all the choices
+    # as safe for rendering; since this modifies the
+    # entries in place, it only works on choices that
+    # are lists, not tuples
+    @classmethod
+    def safe_choices(cls, choices):
+        for i in range(len(choices)):
+            choice = choices[i]
+            if isinstance(choice[1], list):
+                for j in range(len(choice[1])):
+                    choice[1][j] = ( choice[1][j][0], mark_safe(choice[1][j][1]) )
+            else:
+                choices[i] = ( choice[0], mark_safe(choice[1]) )
+
+        return choices
 
 # a form mix-in that automatically includes the form alias field
 # so that AjaxMultiFormView can dispatch submission to the correct

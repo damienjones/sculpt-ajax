@@ -35,10 +35,10 @@ class AjaxMessageView(AjaxView):
     part1 = None
     part2 = None
 
-    def get(self, request, category, part1, part2, *args, **kwargs):
+    def get(self, request, category = None, part1 = None, part2 = None, *args, **kwargs):
         return self.post(request, category, part1, part2, *args, **kwargs)
 
-    def post(self, request, category, part1, part2, *args, **kwargs):
+    def post(self, request, category = None, part1 = None, part2 = None, *args, **kwargs):
         if self.category is not None:
             category = self.category
         if self.part1 is not None:
