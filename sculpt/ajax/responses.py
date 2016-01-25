@@ -156,7 +156,7 @@ class AjaxMixedResponse(JsonResponse):
 
         # do HTML updates
         if show_updates and 'updates' in response_data:
-            response['html'] = cls.render_html_templates(context, response_data['updates'], updates_attrs)
+            response['html'] = cls.render_html_templates(context, response_data['updates'], updates_attrs, default_html)
 
         # if we are given data results, pass those along
         # without modification
@@ -313,7 +313,7 @@ class AjaxErrorResponse(JsonResponse):
 #
 class AjaxFormErrorResponse(JsonResponse):
 
-    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None, field_updates = None, updates_attrs = None):
+    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None, field_updates = None, updates_attrs = None, default_html = None):
         # check whether this is a partial validation response
         is_partial = last_field != None
         
@@ -371,7 +371,7 @@ class AjaxFormErrorResponse(JsonResponse):
             if 'size' in error:
                 results['error']['size'] = error['size']
         if updates is not None:
-            results['html'] = AjaxMixedResponse.render_html_templates(context, updates, updates_attrs)
+            results['html'] = AjaxMixedResponse.render_html_templates(context, updates, updates_attrs, default_html)
         if toast is not None:
             results['toast'] = AjaxMixedResponse.render_toast(context, toast)
         if field_updates is not None:

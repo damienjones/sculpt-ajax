@@ -331,7 +331,7 @@ class AjaxResponseView(AjaxView):
     # shortcut to render to string using the defined templates
     # for modal, toast, and updates, and return the correct
     # AJAX response
-    def prepare_response(self, context = None, results = None, updates_attrs = None):
+    def prepare_response(self, context = None, results = None, updates_attrs = None, default_html = None):
         if context is None:
             context = {}
         if not isinstance(context, Context):
@@ -352,7 +352,7 @@ class AjaxResponseView(AjaxView):
         if results:
             response_data['results'] = results
             
-        return AjaxMixedResponse.create(context, response_data, updates_attrs = updates_attrs)
+        return AjaxMixedResponse.create(context, response_data, updates_attrs = updates_attrs, default_html = default_html)
 
     # handle POST request (the "normal" request)
     def post(self, request, *args, **kwargs):
@@ -731,8 +731,13 @@ class AjaxFormView(AjaxResponseView):
                 form_attrs['prefix'] = form_alias
 
             # create the form object
-            form = form_class(initial = initials[form_alias], **form_attrs)
+            # NOTE: no default for form_class
+            form = form_data['form_class'](initial = initials[form_alias], **form_attrs)
             context['forms'][form_alias] = form
+
+            # fill in form type, if specified
+            if 'form_type' in form_data:
+                form.form_type = form_data['form_type']
 
             # extra step: apply Crispy helper attributes
             if hasattr(form, 'helper'):
@@ -826,11 +831,15 @@ class AjaxFormView(AjaxResponseView):
         # be addressed in the derived class
         #
         if hasattr(request, 'FILES') and request.FILES:
-            form = form_class(request.POST, request.FILES, **form_data['form_attrs'])
+            form = form_data['form_class'](request.POST, request.FILES, **form_data['form_attrs'])
         else:
-            form = form_class(request.POST, **form_data['form_attrs'])
+            form = form_data['form_class'](request.POST, **form_data['form_attrs'])
 
-        rv = self.prepare_form(form)
+        # fill in form type if specified, as a convenience
+        if 'form_type' in form_data:
+            form.form_type = form_data['form_type']
+
+        rv = self.prepare_form(form, form_alias)
         if isinstance(rv, self.response_base_class):
             return rv
         
@@ -839,7 +848,7 @@ class AjaxFormView(AjaxResponseView):
             is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)
             
             # call any processing needed for this partial form
-            rv = self.process_partial_form(form)
+            rv = self.process_partial_form(form, form_alias)
             if isinstance(rv, self.response_base_class):
                 return rv
             
@@ -866,7 +875,7 @@ class AjaxFormView(AjaxResponseView):
             # IN THE FORM CLASS
             if not form.is_valid():
                 # call any processing needed for this invalid form
-                rv = self.process_invalid_form(form)
+                rv = self.process_invalid_form(form, form_alias)
                 if isinstance(rv, self.response_base_class):
                     return rv
 
