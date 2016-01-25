@@ -285,6 +285,7 @@ class AjaxResponseView(AjaxView):
     toast = None
     updates = None
     context = None
+    updates_attrs = None
 
     # shared setup based on request parameters;
     #
@@ -330,12 +331,15 @@ class AjaxResponseView(AjaxView):
     # shortcut to render to string using the defined templates
     # for modal, toast, and updates, and return the correct
     # AJAX response
-    def prepare_response(self, context = None, results = None):
-        if context == None:
+    def prepare_response(self, context = None, results = None, updates_attrs = None):
+        if context is None:
             context = {}
         if not isinstance(context, Context):
             # must have a Context instance to render templates
             context = RequestContext(self.request, context)
+
+        if updates_attrs is None:
+            updates_attrs = self.updates_attrs
 
         # prepare all-in-one configuration
         response_data = {}
@@ -348,7 +352,7 @@ class AjaxResponseView(AjaxView):
         if results:
             response_data['results'] = results
             
-        return AjaxMixedResponse.create(context, response_data)
+        return AjaxMixedResponse.create(context, response_data, updates_attrs = updates_attrs)
 
     # handle POST request (the "normal" request)
     def post(self, request, *args, **kwargs):
