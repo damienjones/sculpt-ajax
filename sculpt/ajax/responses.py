@@ -105,11 +105,14 @@ class AjaxMixedResponse(JsonResponse):
     #   toast               a dict or list of dicts:
     #       template_name   a toast response
     #       duration        how long to leave the toast up
-    #   updates             a list:
+    #   updates             a list of dicts:
     #       id              the HTML ID to be updated
-    #       template_name   the template to render
-    #       class_add       class(es) to add to the html_id object
+    #       template_name   the template to render (required if html is missing)
+    #       html            fully-rendered HTML (required if template_name is missing)
+    #       class_add       class(es) to add to the html_id object (optional)
     #       class_remove    class(es) to remove from the html_id object
+    #       mode            HTML update mode to use
+    #       display         whether to additional show or hide the object
     #
     # if a modal is returned, its code will be null
     #
@@ -122,8 +125,12 @@ class AjaxMixedResponse(JsonResponse):
     # instances, so modifying them on the fly would
     # require deep-copying them first.
     #
+    # Since this factory method modifies response_data,
+    # it performs a deep copy internally so the original
+    # data passed into it will not be modified.
+    #
     @classmethod
-    def create(cls, context, response_data, show_modal = True, show_toast = True, show_updates = True):
+    def create(cls, context, response_data, show_modal = True, show_toast = True, show_updates = True, updates_attrs = None, default_html = None):
         response = {}
 
         # do a modal
@@ -149,7 +156,7 @@ class AjaxMixedResponse(JsonResponse):
 
         # do HTML updates
         if show_updates and 'updates' in response_data:
-            response['html'] = cls.render_html_templates(context, response_data['updates'])
+            response['html'] = cls.render_html_templates(context, response_data['updates'], updates_attrs)
 
         # if we are given data results, pass those along
         # without modification
@@ -171,8 +178,15 @@ class AjaxMixedResponse(JsonResponse):
     # returned data, except 'template_name' is given instead
     # of 'html'.
     #
+    # If you supply None as the template_name or leave it
+    # out, it's assumed the HTML has already been rendered.
+    # If you supply None as the HTML as well, the
+    # default_html will be supplied, which is useful if you've
+    # rendered HTML somewhere else (e.g. faked a GET request)
+    # and need to wrap it in an AJAX response.
+    #
     @classmethod
-    def render_html_templates(cls, context, updates):
+    def render_html_templates(cls, context, updates, updates_attrs = None, default_html = None):
         rendered_html = copy.deepcopy(updates)
         for i in range(len(rendered_html)):
             # render the update                
@@ -181,6 +195,13 @@ class AjaxMixedResponse(JsonResponse):
                 # None is interpreted to mean the HTML is already rendered
                 template = get_template(template_name)
                 rendered_html[i]['html'] = template.render(context)
+            elif rendered_html[i]['html'] is None:
+                rendered_html[i]['html'] = default_html
+
+            # we might also need to rewrite the ID of the update
+            # based on attributes we receive
+            if updates_attrs is not None:
+                rendered_html[i]['id'] = rendered_html[i]['id'] % updates_attrs
 
         return rendered_html
 
@@ -292,7 +313,7 @@ class AjaxErrorResponse(JsonResponse):
 #
 class AjaxFormErrorResponse(JsonResponse):
 
-    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None, field_updates = None):
+    def __init__(self, form, last_field = None, focus_field = None, error = None, context = None, updates = None, toast = None, field_updates = None, updates_attrs = None):
         # check whether this is a partial validation response
         is_partial = last_field != None
         
@@ -350,7 +371,7 @@ class AjaxFormErrorResponse(JsonResponse):
             if 'size' in error:
                 results['error']['size'] = error['size']
         if updates is not None:
-            results['html'] = AjaxMixedResponse.render_html_templates(context, updates)
+            results['html'] = AjaxMixedResponse.render_html_templates(context, updates, updates_attrs)
         if toast is not None:
             results['toast'] = AjaxMixedResponse.render_toast(context, toast)
         if field_updates is not None:
