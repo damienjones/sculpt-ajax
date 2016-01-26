@@ -749,6 +749,11 @@ class AjaxFormView(AjaxResponseView):
             if isinstance(rv, self.response_base_class):
                 return rv
 
+        # special case: for convenience, if there is just one form,
+        # place it in the context
+        if self.form_class is not None:
+            context['form'] = context['forms'][None]
+
         # render the template and give back a response
         return self.render(context)
         
@@ -811,8 +816,9 @@ class AjaxFormView(AjaxResponseView):
 
         # obtain the configuration data for this form class
         form_data = self.resolved_form_classes[form_alias]
+        form_attrs = form_data.get('form_attrs', {})
 
-        if 'prefix' not in form_data['form_attrs']:
+        if 'prefix' not in form_attrs:
             # strictly speaking, it's a bad idea to modify
             # this dict without making a copy first, because
             # the form_classes dict is usually a reference to
@@ -820,7 +826,7 @@ class AjaxFormView(AjaxResponseView):
             # object instantiations; in this case, however,
             # the change would be the same every time, so
             # we will let this one slide
-            form_data['form_attrs']['prefix'] = form_alias
+            form_attrs['prefix'] = form_alias
 
         # create the form based on the submitted data
         # (automatically pass in files if they were submitted)
@@ -831,9 +837,9 @@ class AjaxFormView(AjaxResponseView):
         # be addressed in the derived class
         #
         if hasattr(request, 'FILES') and request.FILES:
-            form = form_data['form_class'](request.POST, request.FILES, **form_data['form_attrs'])
+            form = form_data['form_class'](request.POST, request.FILES, **form_attrs)
         else:
-            form = form_data['form_class'](request.POST, **form_data['form_attrs'])
+            form = form_data['form_class'](request.POST, **form_attrs)
 
         # fill in form type if specified, as a convenience
         if 'form_type' in form_data:
