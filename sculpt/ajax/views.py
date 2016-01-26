@@ -720,39 +720,7 @@ class AjaxFormView(AjaxResponseView):
         # If the source form_classes is not an OrderedDict but
         # a regular dict, no harm is done.
         #
-        context['forms'] = OrderedDict()
-        for form_alias,form_data in self.resolved_form_classes.iteritems():
-            self.form_data = form_data              # in case handler needs it
-
-            # extract form/helper attributes
-            helper_attrs = form_data.get('helper_attrs', {})
-            form_attrs = form_data.get('form_attrs', {})
-            if 'prefix' not in form_attrs:
-                form_attrs['prefix'] = form_alias
-
-            # create the form object
-            # NOTE: no default for form_class
-            form = form_data['form_class'](initial = initials[form_alias], **form_attrs)
-            context['forms'][form_alias] = form
-
-            # fill in form type, if specified
-            if 'form_type' in form_data:
-                form.form_type = form_data['form_type']
-
-            # extra step: apply Crispy helper attributes
-            if hasattr(form, 'helper'):
-                for k in helper_attrs:
-                    setattr(form.helper, k, helper_attrs[k])
-
-            # allow derived classes to modify the form post-creation
-            rv = self.prepare_form(form, form_alias)
-            if isinstance(rv, self.response_base_class):
-                return rv
-
-        # special case: for convenience, if there is just one form,
-        # place it in the context
-        if self.form_class is not None:
-            context['form'] = context['forms'][None]
+        rv = self.prepare_all_forms(context, initials)
 
         # render the template and give back a response
         return self.render(context)
@@ -975,6 +943,48 @@ class AjaxFormView(AjaxResponseView):
         rv = self.prepare_nonform_context(context)
         if isinstance(rv, self.response_base_class):
             return rv
+
+    # prepare the actual form objects for all forms by
+    # letting each one process separately
+    #
+    # NOTE: if any form's prepare_form method returns a
+    # response, it will short-circuit the entire view.
+    #
+    def prepare_all_forms(self, context, initials):
+        context['forms'] = OrderedDict()
+
+        for form_alias,form_data in self.resolved_form_classes.iteritems():
+            self.form_data = form_data              # in case handler needs it
+
+            # extract form/helper attributes
+            helper_attrs = form_data.get('helper_attrs', {})
+            form_attrs = form_data.get('form_attrs', {})
+            if 'prefix' not in form_attrs:
+                form_attrs['prefix'] = form_alias
+
+            # create the form object
+            # NOTE: no default for form_class
+            form = form_data['form_class'](initial = initials[form_alias], **form_attrs)
+            context['forms'][form_alias] = form
+
+            # fill in form type, if specified
+            if 'form_type' in form_data:
+                form.form_type = form_data['form_type']
+
+            # extra step: apply Crispy helper attributes
+            if hasattr(form, 'helper'):
+                for k in helper_attrs:
+                    setattr(form.helper, k, helper_attrs[k])
+
+            # allow derived classes to modify the form post-creation
+            rv = self.prepare_form(form, form_alias)
+            if isinstance(rv, self.response_base_class):
+                return rv
+
+        # special case: for convenience, if there is just one form,
+        # place it in the context
+        if self.form_class is not None:
+            context['form'] = context['forms'][None]
 
     # internally, we want to process all of our forms as though
     # multiples were provided; this property provides a wrapper
