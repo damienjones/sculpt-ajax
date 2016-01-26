@@ -803,7 +803,7 @@ class AjaxFormView(AjaxResponseView):
         # without an alias, that is acceptable, but
         # otherwise, we have an error
         #
-        if form_alias is None and None not in self.form_classes:
+        if form_alias is None and None not in self.resolved_form_classes:
             # we're going to reject this request because
             # we don't know which form it belongs to, but
             # it's possible this is due to a programming
