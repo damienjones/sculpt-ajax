@@ -817,6 +817,14 @@ class AjaxFormView(AjaxResponseView):
         if isinstance(rv, self.response_base_class):
             return rv
         
+        # we may have explicitly flagged all submissions to be
+        # treated as partial validation
+        if self.always_partially_validate and not self.is_partial_validation:
+            last_field = form.fields.keys()[-1]
+            self._partial_validation_last_field = '%s-%s' % (form.prefix, last_field) if form.prefix is not None else last_field
+            if settings.DEBUG:
+                print 'AJAX FORM POST: forcing partial validation, ending with %s' % last_field
+
         if self.is_partial_validation:
             # we're only doing partial validation
             is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)

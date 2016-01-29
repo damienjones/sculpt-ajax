@@ -51,9 +51,17 @@ class CrispyMixin(object):
         # give derived classes a chance to modify the helper,
         # especially for providing layout
         self.setup_form_helper(helper = self.helper)
+        if self.is_partial_validation_enabled:
+            self.enable_partial_validation(self.helper)
 
     def setup_form_helper(self, helper):
         pass
+
+    def enable_partial_validation(self, helper):
+        if helper.form_class in (None,''):
+            helper.form_class = '_sculpt_ajax_partial'
+        else:
+            helper.form_class += ' _sculpt_ajax_partial'
 
 
 # form mixin class that provides enhanced validation with two
@@ -607,6 +615,11 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
     # here
     form_action = None
 
+    # it's also very helpful to know which forms are enabled
+    # for partial validation when doing automatic layout; by
+    # default, it's not
+    is_partial_validation_enabled = False
+
     def __init__(self, *args, **kwargs):
         # pluck off the form_action if given
         # NOTE: must be given as a keyword argument; we
@@ -615,6 +628,10 @@ class AjaxForm(EnhancedValidationMixin, CrispyMixin, forms.Form):
         # that would be a poor choice)
         if 'form_action' in kwargs:
             self.form_action = kwargs.pop('form_action')
+
+        # similary for partial validation
+        if 'enable_partial_validation' in kwargs:
+            self.is_partial_validation_enabled = kwargs.pop('enable_partial_validation')
 
         # first, go ahead and let the Django Form class set
         # itself up; this loops through the field definitions
