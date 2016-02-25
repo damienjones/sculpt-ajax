@@ -1091,7 +1091,7 @@ class AjaxMultiFormView(AjaxView):
             # IN THE FORM CLASS
             if not form.is_valid():
                 # call any processing needed for this invalid form
-                rv = self.process_invalid_form(form)
+                rv = self.process_invalid_form(form, form_alias)
                 if isinstance(rv, self.response_base_class):
                     return rv
 
