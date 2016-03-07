@@ -326,7 +326,7 @@ class AjaxResponseView(AjaxView):
     # when you call as_view() instead.
     #
     def prepare_context(self, context):
-        pass
+        context['view'] = self
 
     # shortcut to render to string using the defined templates
     # for modal, toast, and updates, and return the correct

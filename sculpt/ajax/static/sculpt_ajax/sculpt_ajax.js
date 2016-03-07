@@ -816,6 +816,7 @@
 			// NOTE: this can be used for more than just upload fields,
 			// hence the generic name
 			$(document).on('click', '._sculpt_proxy_click', function(e) {
+				e.preventDefault();
 				var target = $(this).attr('data-target-id');
 				$('#'+target).click();
 			});
@@ -823,6 +824,7 @@
 			// and sometimes we want links to submit forms even when
 			// the link/button is nowhere near that form
 			$(document).on('click', '._sculpt_proxy_submit', function(e) {
+				e.preventDefault();
 				var target = $(this).attr('data-target-id');
 				$('#'+target).submit();
 			});
