@@ -284,6 +284,7 @@ class AjaxResponseView(AjaxView):
     modal = None
     toast = None
     updates = None
+    response_data = None    # in case you want to fill modal, toast, updates all at once
     context = None
     updates_attrs = None
 
@@ -342,15 +343,20 @@ class AjaxResponseView(AjaxView):
             updates_attrs = self.updates_attrs
 
         # prepare all-in-one configuration
-        response_data = {}
-        if self.modal:
-            response_data['modal'] = self.modal
-        if self.toast:
-            response_data['toast'] = self.toast
-        if self.updates:
-            response_data['updates'] = self.updates
-        if results:
-            response_data['results'] = results
+        if self.response_data is None:
+            # response is in pieces
+            response_data = {}
+            if self.modal:
+                response_data['modal'] = self.modal
+            if self.toast:
+                response_data['toast'] = self.toast
+            if self.updates:
+                response_data['updates'] = self.updates
+            if results:
+                response_data['results'] = results
+        else:
+            # don't build it from parts, it's all assembled
+            response_data = self.response_data
             
         return AjaxMixedResponse.create(context, response_data, updates_attrs = updates_attrs, default_html = default_html)
 
