@@ -1,4 +1,5 @@
 from django.db import transaction, DatabaseError
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template import RequestContext, Context
@@ -11,6 +12,7 @@ from sculpt.ajax.responses import AjaxSuccessResponse, AjaxHTMLResponse, AjaxMod
 from sculpt.common import Enumeration
 
 from collections import OrderedDict
+import copy
 
 base_view_class = View
 if settings.SCULPT_AJAX_LOGIN_REQUIRED:
@@ -186,7 +188,7 @@ class AjaxView(base_view_class):
             # switch controls debug backtrace display for page requests
             # too, and is always OFF in production
             #
-            # NOTE: this debug settings takes precedence over whether the
+            # NOTE: this debug setting takes precedence over whether the
             # exception is a database error (DatabaseError) so that
             # the backtrace can be presented. This is important because
             # DatabaseError can also be thrown when a unique constraint
@@ -202,7 +204,7 @@ class AjaxView(base_view_class):
                 if settings.SCULPT_AJAX_DUMP_REQUESTS:
                     print backtrace_text
                 return AjaxExceptionResponse({ 'code': 0, 'title': e.__class__.__name__, 'message': str(e), 'backtrace': backtrace_text })
-
+                
             elif isinstance(e, DatabaseError) and settings.SCULPT_AJAX_REPORT_AJAX_DATABASE_ERRORS:
                 # NOT in debug mode, but this is an DatabaseError;
                 # we don't directly log these and and we at least
@@ -282,6 +284,7 @@ class AjaxResponseView(AjaxView):
     modal = None
     toast = None
     updates = None
+    response_data = None    # in case you want to fill modal, toast, updates all at once
     context = None
     updates_attrs = None
 
@@ -293,7 +296,7 @@ class AjaxResponseView(AjaxView):
     # method. Django creates a new View object with
     # each request, and the __init__ method receives
     # all the parameters from the urls.py .as_view()
-    # call. This method received the additional
+    # call. This method receives the additional
     # parameters from URL keyword-matching and from
     # the extra parameters dict in the urls.py url()
     # invocation. (The latter should be considered
@@ -318,13 +321,18 @@ class AjaxResponseView(AjaxView):
     # TemplateView.get_context_data(), but this does
     # not derive from TemplateView so it's not available.
     #
+    # NOTE: this is only if you need to programmatically
+    # add to the context; if you simply need to put a few
+    # static things into the context, you can set that
+    # when you call as_view() instead.
+    #
     def prepare_context(self, context):
         context['view'] = self
 
     # shortcut to render to string using the defined templates
     # for modal, toast, and updates, and return the correct
     # AJAX response
-    def prepare_response(self, context = None, results = None, updates_attrs = None):
+    def prepare_response(self, context = None, results = None, updates_attrs = None, default_html = None):
         if context is None:
             context = {}
         if not isinstance(context, Context):
@@ -335,17 +343,22 @@ class AjaxResponseView(AjaxView):
             updates_attrs = self.updates_attrs
 
         # prepare all-in-one configuration
-        response_data = {}
-        if self.modal:
-            response_data['modal'] = self.modal
-        if self.toast:
-            response_data['toast'] = self.toast
-        if self.updates:
-            response_data['updates'] = self.updates
-        if results:
-            response_data['results'] = results
+        if self.response_data is None:
+            # response is in pieces
+            response_data = {}
+            if self.modal:
+                response_data['modal'] = self.modal
+            if self.toast:
+                response_data['toast'] = self.toast
+            if self.updates:
+                response_data['updates'] = self.updates
+            if results:
+                response_data['results'] = results
+        else:
+            # don't build it from parts, it's all assembled
+            response_data = self.response_data
             
-        return AjaxMixedResponse.create(context, response_data, updates_attrs = updates_attrs)
+        return AjaxMixedResponse.create(context, response_data, updates_attrs = updates_attrs, default_html = default_html)
 
     # handle POST request (the "normal" request)
     def post(self, request, *args, **kwargs):
@@ -356,8 +369,17 @@ class AjaxResponseView(AjaxView):
             return rv
 
         # set up context
-        context = self.context or {}
-        initial = {}
+        #
+        # NOTE: if a default context has been provided, it
+        # must be deep-copied prior to use in case the
+        # prepare_context() method needs to modify it. This
+        # is inefficient if it's not going to be modified.
+        #
+        if self.context is None:
+            context = {}
+        else:
+            context = copy.deepcopy(self.context)
+        
         rv = self.prepare_context(context)
         if isinstance(rv, self.response_base_class):
             return rv
@@ -374,19 +396,38 @@ class AjaxResponseView(AjaxView):
 # submission data on POST and return a JSON result; the sculpt-ajax
 # handler on the client will then process the errors and highlight
 # the appropriate fields in the form. Successful form submission
-# will direct the player to the next step.
+# will direct the user to the next step.
 #
-# when deriving from this view, you must provide:
+# When deriving from this view, you must provide:
 #   template_name   an HTML template path (for GET)
 #   form_class      a form class (a reference to the class,
 #                   not just the name as a string)
 #   target_url      where to go after the POST succeeds; if None,
 #                   a response is generated like AjaxResponseView
 #
+# Optionally, you may also include:
+#   form_attrs      additional parameters for form creation
+#   helper_attrs    additional parameters for form helper creation
+#
+# Alternatively you may provide a dict (or OrderedDict) of form
+# aliases and form creation data (the same template_name, form_class,
+# target_url, form_attrs, and helper_attrs as for a single form)
+# and all of the forms will be created, with the form_alias used as
+# a prefix for each form. If you use an OrderedDict instead of just
+# a dict you can iterate over it in the same order that you added
+# to it.
+#
+# Multiple forms are intended for situations where the user only
+# intends to submit a single form on the page rather than all of
+# them at once. There are other more complex use cases that involve
+# processing partially-valid forms. A tutorial/cookbook should
+# be written.
+#
 class AjaxFormView(AjaxResponseView):
     
-    # these attributes must be present (but unfilled) or the
-    # as_view method will not allow them to be set
+    # when only a single form is present, these variables
+    # can be set as a convenience rather than defining
+    # form_classes with just one entry
     template_name = None
     form_class = None
     target_url = None
@@ -418,6 +459,13 @@ class AjaxFormView(AjaxResponseView):
     #
     render_only = False
 
+    # similarly, sometimes we want a form view to only
+    # process form(s), not render them (especially if the
+    # form is rendered in another view); set this flag to
+    # True to block the normal GET handling
+    #
+    process_only = False
+
     # sometimes we want to do all of our processing as though
     # it's partial validation, but occasionally the browser
     # may do a full submission if the user presses RETURN;
@@ -425,6 +473,26 @@ class AjaxFormView(AjaxResponseView):
     # treated as partial submissions
     #
     always_partially_validate = False
+    
+    # instead of a single form we might have multiple forms;
+    # this should be a dict or OrderedDict with form aliases
+    # as keys
+    #
+    # NOTE: if this is None, template_name, form_class,
+    # target_url, helper_attrs, and form_attrs should NOT
+    # be used.
+    #
+    form_classes = None
+
+    # and a very common pattern is to create templates for
+    # forms, and re-use the template for multiple copies of
+    # the same form (for multi-record editing); for these,
+    # it's a good idea to set form_type in each template to
+    # a meaningful thing, and form_type will be used in place
+    # of form_alias when invoking the various overridable
+    # methods for each form
+    #
+    form_class_templates = None
     
     #
     # override these to provide custom handling for your form
@@ -438,397 +506,88 @@ class AjaxFormView(AjaxResponseView):
 
     # prep the context and initial form data
     #
-    # NOTE: you don't have to put form into context, the
-    # boilerplate will do that
+    # This is called once for each form, with the form_alias
+    # parameter indicating which form it's being invoked
+    # for. In a single-form view, form_alias will be None.
+    # It's reasonable to override this for a single-form
+    # view, but for a multi-form view, it may be more
+    # convenient to instead provide a prepare_context_<alias>
+    # method with the same signature, and allow the code
+    # here to dispatch it. You can also override the
+    # prepare_default_context method to write your own
+    # default case without replacing the entire dispatching
+    # mechanism. In cases where multiple copuie
     #
-    # NOTE: this IS NOT called for POST because POST
-    # will not render HTML, UNLESS you are falling back
-    # on AjaxResponseView-style responses, in which case
-    # it will be called AFTER form validation, BEFORE
-    # any modal/toast/updates rendering
+    # At the time this function is called, the form has
+    # not been created.
+    #
+    # This method is normally not called for POST because
+    # POST normally doesn't render HTML. However, if you are
+    # falling back to the AjaxResponseView-style response,
+    # it WILL be called just prior to that response being
+    # rendered.
     #
     # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
+    # if you return an HttpResponse type, processing
     # will stop and that response sent back to the user
     #
     # NOTE: this is NOT inherited from AjaxResponseView
-    # as its call signature differs (includes initial)
-    #
-    def prepare_context(self, context, initial):
-        pass
-
-    # after the form object has been created, it may
-    # need to be modified before being rendered or
-    # validated; do that here
-    #
-    # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
-    # will stop and that response sent back to the user
-    #
-    def prepare_form(self, form):
-        pass
-
-    # when a form has been successfully validated, do
-    # something with the data; this is the most important
-    # function to override and will typically save the
-    # data or at least update target_url
-    #
-    # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
-    # will stop and that response sent back to the user;
-    # you may also return a string to indicate a
-    # different target URL than the default
-    #
-    def process_form(self, form):
-        pass
-
-    # when a form is determined to be invalid, it might
-    # still be desirable to do some processing before
-    # returning an error response
-    #
-    # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
-    # will stop and that response sent back to the user;
-    # you may also return a dict that will be passed as
-    # extra parameters to the AjaxFormErrorResponse
-    # constructor in case you want to provide toast,
-    # HTML updates, or field value updates
-    #
-    def process_invalid_form(self, form):
-        pass
-    
-    # when a form is being partially validated you may
-    # want to do something (and usually this is very
-    # different from what you do with a fully-valid form)
-    #
-    def process_partial_form(self, form):
-        pass
-    
-    # this is a wrapper around the Django render function,
-    # in case GET requests need to return AJAX responses
-    def render(self, context):
-        if self.template_name is None and (self.updates is not None or self.modal is not None or self.toast is not None):
-            # this is intended to be an AJAX resopnse
-            return self.prepare_response(context)
-
-        else:
-            # this is a standard HTML response
-            return render(self.request, self.template_name, context)
-
-    #
-    # boilerplate, so you don't have to keep writing it
-    #
-    
-    # basic GET handler: set up the form and
-    # context and render the view
-    def get(self, request, *args, **kwargs):
-
-        # do GET/POST combined setup
-        rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, self.response_base_class):
-            return rv
-        
-        # set up context and initial form data
-        context = self.context or {}
-        initial = {}
-        rv = self.prepare_context(context, initial)
-        if isinstance(rv, self.response_base_class):
-            return rv
-
-        # create form(s) and give the derived class a chance
-        # to modify it
-        form = self.form_class(initial = initial, **self.form_attrs)
-        context['form'] = form
-
-        # Allows you to prepopulate the helper attributes before you prepare the form
-        for k in self.helper_attrs:
-            setattr(form.helper, k, self.helper_attrs[k])
-
-        rv = self.prepare_form(form)
-        if isinstance(rv, self.response_base_class):
-            return rv
-        
-        # render the template and give back a response
-        return self.render(context)
-        
-    # basic POST handler: validate the form
-    # and dispatch to a success handler
-    def post(self, request, *args, **kwargs):
-    
-        # if POST has been blocked due to this being a view-
-        # only form, pretend this function doesn't exist
-        if self.render_only:
-            return self.http_method_not_allowed(request, *args, **kwargs)
-    
-        # if this is a partial validation request, record that
-        # NOTE: at this point, the last field's name has
-        # not been validated
-        if '_partial' in request.GET:
-            self._partial_validation_last_field = request.GET['_partial']
-
-        # do GET/POST combined setup
-        rv = self.prepare_request(*args, **kwargs)
-        if isinstance(rv, self.response_base_class):
-            return rv
-        
-        # create the form based on the submitted data
-        # (automatically pass in files if they were submitted)
-        if hasattr(request, 'FILES') and request.FILES:
-            form = self.form_class(request.POST, request.FILES, **self.form_attrs)
-        else:
-            form = self.form_class(request.POST, **self.form_attrs)
-        rv = self.prepare_form(form)
-        if isinstance(rv, self.response_base_class):
-            return rv
-        
-        # we may have explicitly flagged all submissions to be
-        # treated as partial validation
-        if self.always_partially_validate and not self.is_partial_validation:
-            last_field = form.fields.keys()[-1]
-            self._partial_validation_last_field = '%s-%s' % (form.prefix, last_field) if form.prefix is not None else last_field
-            print 'forcing partial validation'
-
-        if self.is_partial_validation:
-            # we're only doing partial validation
-            is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)
-            
-            # call any processing needed for this partial form
-            rv = self.process_partial_form(form)
-            if isinstance(rv, self.response_base_class):
-                return rv
-            
-            # whether we are valid or not, we actually go ahead 
-            # and return the form error response, so that existing
-            # successfully-validated fields can be highlighted
-            #
-            # NOTE: if process_partial_form returns a dict, we will
-            # assume these are additional parameters to give to
-            # the AjaxFormErrorResponse constructor
-            #
-            if isinstance(rv, dict):
-                return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'), **rv)
-            else:
-                return AjaxFormErrorResponse(form, last_field = self._partial_validation_last_field, focus_field = request.GET.get('_focus'))
-                
-        else:        
-            # validate the form and return an error response
-            # NOTE: THIS MEANS ALL VALIDATION MUST BE DONE
-            # IN THE FORM CLASS
-            if not form.is_valid():
-                # call any processing needed for this invalid form
-                rv = self.process_invalid_form(form)
-                if isinstance(rv, self.response_base_class):
-                    return rv
-
-                # create the error response                
-                if isinstance(rv, dict):
-                    return AjaxFormErrorResponse(form, **rv)
-                else:
-                    return AjaxFormErrorResponse(form)
-            
-        # a valid form will usually require something to
-        # be done with its data
-        rv = self.process_form(form)
-        if rv is None:
-            # this means use the default target_url
-            rv = self.target_url
-
-        if rv is None:
-            # no JsonResponse, no target_url string...
-            # fall back to AjaxResponseView-style
-            context = {}
-            initial = {}
-            rv = self.prepare_context(context, initial)
-            if isinstance(rv, self.response_base_class):
-                # in case the context-creating needs to bail
-                return rv
-            rv = self.prepare_response(context)
-
-        if isinstance(rv, self.response_base_class):
-            # we now have a valid JSON response; stop
-            return rv
-
-        if isinstance(rv, basestring):
-            # we could just overwrite self.target_url
-            # but it's trivial to return the redirect
-            # in one step...
-            return AjaxRedirectResponse(rv)
-
-        # default handling is to go to the target URL
-        return AjaxRedirectResponse(self.target_url)
-
-    # test whether this request is trying to do partial
-    # validation; use this in your overridden functions to
-    # avoid accidentally terminating partial validation
-    # by returning AjaxMixedResponse objects
-    @property
-    def is_partial_validation(self):
-        return self._partial_validation_last_field != None
-
-    # the internal tracking field that remembers the
-    # last field for validation; if you MUST check this,
-    # you can, but you should use is_partial_validation
-    # instead
-    _partial_validation_last_field = None
-    
-
-# an AJAX form view class that handles multiple forms at once
-#
-# This is similar to AjaxFormView except that it explicitly
-# expects multiple forms to be included on the page. Generally
-# these will be submitted to separate URLs, but this is not a
-# requirement and this class provides some semi-automatic
-# routing of form processing. To enable this, you must
-# include in EACH form a hidden form_alias field, the value
-# of which will be supplied by the boilerplate.
-#
-# When deriving from this view, you must provide:
-#   template_name   an HTML template path
-#   form_classes    a dict; keys are form aliases (relevant
-#                   only to the view and its template) and
-#                   values are tuples with these elements:
-#     form_class    a form class (a reference to the class,
-#                   not just the name as a string)
-#     helper_attrs  a dict of attrs applied to the Crispy
-#                   form helper object as attributes (not
-#                   to be confused with the Crispy attrs
-#                   attribute)
-#                   (of special note is form_action, the
-#                   URL to which the form will be POSTed)
-#     target_url    where to go after a POST of this form
-#                   succeeds; if None, uses view default
-#     form_attrs    a dict of additional parameters to
-#                   pass to the form object during creation
-#                   (optional)
-#     form_type     used in place of the form_alias when
-#                   invoking named form handler methods
-#
-# This class does not derive from AjaxFormView but rather
-# directly from AjaxView. There is significant code overlap,
-# though. The prepare_context, prepare_form, and process_form
-# methods can be customized per form by appending _<alias>
-# to the respective function. On POST, the default handler
-# will look for a POSTed element of form_alias which MUST be
-# included; if it matches one of the form aliases in the view,
-# process_form will be routed to that custom function if it
-# exists.
-#
-# NOTE: since form aliases are used to construct Python
-# method names, you should use standard Python style for them.
-#
-# NOTE: on GET requests, ALL forms are processed; on POST
-# requests, only ONE form can be processed (because only one
-# is submitted by the browser).
-#
-# NOTE: if you care about the order in which forms are
-# processed, pass in a SortedDict for form_classes instead
-# of a dict.
-#
-class AjaxMultiFormView(AjaxView):
-    
-    # these attributes must be present (but unfilled) or the
-    # as_view method will not allow them to be set
-    template_name = None
-    form_classes = None
-    target_url = None
-    context = None
-    
-    # sometimes we want a form view to only render form(s),
-    # not process them (especially if we are including more
-    # than one form on the page); set this flag to True to
-    # block the normal POST handling
-    #
-    # NOTE: this pretty much turns this into a non-AJAX
-    # request, since only the GET works and returns raw
-    # HTML, but it allows the same form base classes to be
-    # used.
-    #
-    render_only = False
-    
-    #
-    # override these to provide custom handling for your form
-    #
-
-    # shared setup based on request parameters
-    # (similar to AjaxResponseView, but we don't inherit
-    # from that)
-    #
-    # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
-    # will stop and that response sent back to the user
-    #
-    def prepare_request(self, *args, **kwargs):
-        pass
-
-    # prep the context and initial form data
-    #
-    # NOTE: you probably don't want to override this,
-    # but provide prepare_context_<alias> instead
-    #
-    # NOTE: this is called once per form alias; context
-    # will be the same dict (updatable by each method)
-    # but initial will be unique per form alias
-    #
-    # NOTE: you don't have to put forms into context, the
-    # boilerplate will do that
-    #
-    # NOTE: this IS NOT called for POST because POST
-    # will not render HTML
-    #
-    # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type, processing
-    # will stop and that response sent back to the user,
-    # aborting all other form processing
+    # as its call signature differs
     #
     def prepare_context(self, context, initial, form_alias):
-        if form_alias in self.form_classes:
+        if form_alias is not None and form_alias in self.form_classes:
             method_name = 'prepare_context_%s' % self.form_classes[form_alias].get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                return getattr(self, method_name)(context, initial)
+                return getattr(self, method_name)(context, initial, form_alias)
             else:
-                method_name = 'prepare_context__default'
-                if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                    return getattr(self, method_name)(context, initial, form_alias)
+                return self.prepare_default_context(context, initial, form_alias)
 
-    # and sometimes we need to set some global context
-    # stuff, aside from all the forms, especially when
-    # the list of forms is dynamically generated
-    # NOTE: there's no initial data and no form context
-    def prepare_context__all(self, context):
+    # default handler if no form-specific one is defined
+    def prepare_default_context(self, context, initial, form_alias):
+        pass
+
+    # prep the context, separate from all forms
+    #
+    # In a multi-form view it's often necessary to add
+    # things to the context which aren't tied to any
+    # specific form; override this method to do so.
+    # For single-form views, it's simpler just to add
+    # to the context directly in prepare_context().
+    #
+    # NOTE: a normal return value should be None, but
+    # if you return an HttpResponse type, processing
+    # will stop and that response sent back to the user
+    #
+    def prepare_nonform_context(self, context):
         pass
 
     # after the form object has been created, it may
     # need to be modified before being rendered or
     # validated; do that here
     #
-    # NOTE: you probably don't want to override this,
-    # but provide prepare_form_<alias> instead
-    #
-    # NOTE: this is called once per form alias
-    #
     # NOTE: a normal return value should be None, but
-    # if you return a JsonResponse type (for POST) or
-    # HttpResponse type (for GET), processing will stop
-    # and that response sent back to the user, aborting
-    # all other form processing
+    # if you return a JsonResponse type, processing
+    # will stop and that response sent back to the user
     #
     def prepare_form(self, form, form_alias):
-        if form_alias in self.form_classes:
+        if form_alias is not None and form_alias in self.form_classes:
             method_name = 'prepare_form_%s' % self.form_classes[form_alias].get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                return getattr(self, method_name)(form)
+                return getattr(self, method_name)(form, form_alias)
             else:
-                method_name = 'prepare_form__default'
-                if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                    return getattr(self, method_name)(form, form_alias)
+                return self.prepare_default_form(form, form_alias)
 
-    # when a form has been successfully validated, do
+    # default handler if no form-specific one is defined
+    def prepare_default_form(self, form, form_alias):
+        pass
+
+    # When a form has been successfully validated, do
     # something with the data; this is the most important
     # function to override and will typically save the
-    # data or at least update target_url
+    # data or at least update target_url.
     #
-    # NOTE: you probably don't want to override this,
-    # but provide process_form_<alias> instead
+    # In a POST request this is only called once, for the
+    # single form that was actually submitted.
     #
     # NOTE: a normal return value should be None, but
     # if you return a JsonResponse type, processing
@@ -837,14 +596,16 @@ class AjaxMultiFormView(AjaxView):
     # different target URL than the default
     #
     def process_form(self, form, form_alias):
-        if form_alias in self.form_classes:
+        if form_alias is not None and form_alias in self.form_classes:
             method_name = 'process_form_%s' % self.form_classes[form_alias].get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                return getattr(self, method_name)(form)
+                return getattr(self, method_name)(form, form_alias)
             else:
-                method_name = 'process_form__default'
-                if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                    return getattr(self, method_name)(form, form_alias)
+                return self.process_default_form(form, form_alias)
+
+    # default handler if no form-specific one is defined
+    def process_default_form(self, form, form_alias):
+        pass
     
     # when a form is determined to be invalid, it might
     # still be desirable to do some processing before
@@ -859,31 +620,32 @@ class AjaxMultiFormView(AjaxView):
     # HTML updates, or field value updates
     #
     def process_invalid_form(self, form, form_alias):
-        if form_alias in self.form_classes:
+        if form_alias is not None and form_alias in self.form_classes:
             method_name = 'process_invalid_form_%s' % self.form_classes[form_alias].get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
                 return getattr(self, method_name)(form)
             else:
-                method_name = 'process_invalid_form__default'
-                if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                    return getattr(self, method_name)(form, form_alias)
+                return self.process_default_invalid_form(form, form_alias)
 
-    # similarly, if you want to process partial form
-    # data, provide a process_partial_form_<alias>
-    # method; if it returns an AjaxResponse object,
-    # that will be given to the browser
-    #
-    # the notes on process_form apply to this as well
+    # default handler if no form-specific one is defined
+    def process_default_invalid_form(self, form, form_alias):
+        pass
+
+    # when a form is being partially validated you may
+    # want to do something (and usually this is very
+    # different from what you do with a fully-valid form)
     #
     def process_partial_form(self, form, form_alias):
-        if form_alias in self.form_classes:
+        if form_alias is not None and form_alias in self.form_classes:
             method_name = 'process_partial_form_%s' % self.form_classes[form_alias].get('form_type', form_alias)
             if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                return getattr(self, method_name)(form)
+                return getattr(self, method_name)(form, form_alias)
             else:
-                method_name = 'process_partial_form__default'
-                if hasattr(self, method_name) and callable(getattr(self, method_name)):
-                    return getattr(self, method_name)(form, form_alias)
+                return self.process_default_partial_form(form, form_alias)
+
+    # default handler if no form-specific one is defined
+    def process_default_partial_form(self, form, form_alias):
+        pass
     
     # this is a wrapper around the Django render function,
     # in case GET requests need to return AJAX responses
@@ -900,55 +662,57 @@ class AjaxMultiFormView(AjaxView):
     # boilerplate, so you don't have to keep writing it
     #
     
-    # pull out the form configuration data from a form_alias
-    # definition (accepts either tuple or dict)
-    def extract_form_data(self, form_data):
-        if isinstance(form_data, dict):
-            form_class = form_data['form_class']    # required
-            helper_attrs = form_data.get('helper_attrs')
-            target_url = form_data.get('target_url')
-            form_attrs = form_data.get('form_attrs', {})
-            return (form_class, helper_attrs, target_url, form_attrs)
-        else:
-            return form_data
+    # constructor is invoked when request is dispatched
+    # to view wrapper function
+    def __init__(self, *args, **kwargs):
+
+        # base class copies kwargs to attributes
+        super(AjaxFormView, self).__init__(*args, **kwargs)
+
+        # if we've been given both a single form class and
+        # a collection, complain
+        if self.form_class is not None and self.form_classes is not None:
+            raise ImproperlyConfigured('Cannot specify both a single form class and multiple form classes')
+
+        # We would like to helpfully complain when neither
+        # of those have been filled in, but there are
+        # important use cases where the set of forms is
+        # constructed on the fly, either in a derived-class
+        # constructor (where it would need to go between
+        # the super() call and the test, above) or in the
+        # prepare_request() method below (after the test
+        # has been done). So we cannot test that case here.
 
     # basic GET handler: set up the form and
     # context and render the view
     def get(self, request, *args, **kwargs):
 
+        # if GET has been blocked due to this being a process-
+        # only form, pretend this function doesn't exist
+        if self.process_only:
+            return self.http_method_not_allowed(request, *args, **kwargs)
+    
         # do GET/POST combined setup
         rv = self.prepare_request(*args, **kwargs)
         if isinstance(rv, self.response_base_class):
             return rv
-        
-        # set up context and initial form data
-        context = self.context or {}
+
+        # prepare all the context and initial form data
+
+        # NOTE: if a default context has been provided, it
+        # must be deep-copied prior to use in case the
+        # prepare_context() method needs to modify it. This
+        # is inefficient if it's not going to be modified.
+        if self.context is None:
+            context = {}
+        else:
+            context = copy.deepcopy(self.context)
         initials = {}
-        for form_alias,form_data in self.form_classes.iteritems():
-            self.form_data = form_data              # in case handler needs it
-            form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
-            
-            # extra check: sometimes we forget to include
-            # AjaxFormAliasMixin for forms we want to use
-            # with this view; it's not always an error if
-            # the form action is directed elsewhere, but
-            # it can be helpful to flag these
-            if form_class is None:
-                raise Exception('form_class cannot be None for form_alias %s' % form_alias)
-            if not issubclass(form_class, AjaxFormAliasMixin) and settings.DEBUG:
-                print 'WARNING: %(form_class_name)s is not a sub-class of AjaxFormAliasMixin' % { 'form_class_name': form_class.__name__ }
 
-            initials[form_alias] = { 'form_alias': form_alias }
-            rv = self.prepare_context(context, initials[form_alias], form_alias)
-            if isinstance(rv, self.response_base_class):
-                return rv
-
-        # and the global context prep, after all the
-        # forms are done
-        rv = self.prepare_context__all(context)
+        rv = self.prepare_all_context(context, initials)
         if isinstance(rv, self.response_base_class):
             return rv
-
+        
         # create form(s) and give the derived class a chance
         # to modify it
         #
@@ -962,29 +726,8 @@ class AjaxMultiFormView(AjaxView):
         # If the source form_classes is not an OrderedDict but
         # a regular dict, no harm is done.
         #
-        context['forms'] = OrderedDict()
-        for form_alias,form_data in self.form_classes.iteritems():
-            self.form_data = form_data              # in case handler needs it
-            form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
-            if helper_attrs == None:
-                helper_attrs = {}
-            if 'prefix' not in form_attrs:
-                form_attrs['prefix'] = form_alias
-            form = form_class(initial = initials[form_alias], **form_attrs)
-            context['forms'][form_alias] = form
+        rv = self.prepare_all_forms(context, initials)
 
-            # fill in form type, if specified
-            if isinstance(form_data, dict) and 'form_type' in form_data:
-                form.form_type = form_data['form_type']
-
-            # extra step: apply Crispy helper attributes
-            for k in helper_attrs:
-                setattr(form.helper, k, helper_attrs[k])
-
-            rv = self.prepare_form(form, form_alias)
-            if isinstance(rv, self.response_base_class):
-                return rv
-        
         # render the template and give back a response
         return self.render(context)
         
@@ -1009,60 +752,85 @@ class AjaxMultiFormView(AjaxView):
             return rv
         
         # figure out which form is submitted
-        # NOTE: we require the form_alias field to be
-        # present
-        # NOTE: if we're using prefix (which, by default,
-        # we always are) then there won't BE a form_alias;
-        # instead there will be <alias>-form_alias and we
-        # need to search for it
+        #
+        # We do this by looking for the form_alias field
+        # within the submitted data. This is complicated
+        # by the fact that it, too, is probably prefixed,
+        # as <form_alias>-form_alias, or it might even
+        # be missing entirely.
+        #
         form_alias = None
-        for alias in self.form_classes.iterkeys():
-            alias_field = alias + '-form_alias'
-            if alias_field in request.POST and request.POST[alias_field] == alias:
-                form_alias = alias
-                break
-                
-        # fallback position: unprefixed field
-        if form_alias == None:
-            if 'form_alias' not in request.POST or request.POST['form_alias'] not in self.form_classes:
-                # we're going to reject this request because
-                # we don't know which form it belongs to, but
-                # it's possible this is due to a programming
-                # mistake like not including AjaxFormAliasMixin
-                # in the form's inheritance path, so we want
-                # to be more explicit in calling this out
-                if settings.DEBUG:
-                    print 'AJAX FORM ERROR: no form_alias could be found; did you forget to derive from AjaxFormAliasMixin?'
-                return self.http_method_not_allowed(request, *args, **kwargs)
+        for tested_alias in self.resolved_form_classes.iterkeys():
+            if tested_alias is not None:
+                alias_field = tested_alias + '-form_alias'
+                if alias_field in request.POST and request.POST[alias_field] == tested_alias:
+                    form_alias = tested_alias
+                    break
 
-            # else we know this value is good; use the
-            # unprefixed form_alias
-            form_alias = request.POST['form_alias']
+        if form_alias is None:
+            # look for an unprefixed field
+            if 'form_alias' in request.POST and request.POST['form_alias'] in self.form_classes:
+                form_alias = request.POST['form_alias']
 
-        form_data = self.form_classes[form_alias]
-        form_class, helper_attrs, target_url, form_attrs = self.extract_form_data(form_data)
-        self.form_data = form_data              # in case handler needs it
-        if target_url == None:
-            # this form doesn't have a specific target URL;
-            # use the class-wide one
-            target_url = self.target_url
+        # when we're finished searching, we might still
+        # be missing our alias; if we had just one form
+        # without an alias, that is acceptable, but
+        # otherwise, we have an error
+        #
+        if form_alias is None and None not in self.resolved_form_classes:
+            # we're going to reject this request because
+            # we don't know which form it belongs to, but
+            # it's possible this is due to a programming
+            # mistake like not including AjaxFormAliasMixin
+            # in the form's inheritance path, so we want
+            # to be more explicit in calling this out
+            if settings.DEBUG:
+                print 'AJAX FORM ERROR: no form_alias could be found; did you forget to derive from AjaxFormAliasMixin?'
+            return self.http_method_not_allowed(request, *args, **kwargs)
+
+        # obtain the configuration data for this form class
+        form_data = self.resolved_form_classes[form_alias]
+        form_attrs = form_data.get('form_attrs', {})
+
         if 'prefix' not in form_attrs:
+            # strictly speaking, it's a bad idea to modify
+            # this dict without making a copy first, because
+            # the form_classes dict is usually a reference to
+            # just one copy that is shared among all view
+            # object instantiations; in this case, however,
+            # the change would be the same every time, so
+            # we will let this one slide
             form_attrs['prefix'] = form_alias
 
         # create the form based on the submitted data
+        # (automatically pass in files if they were submitted)
+        #
+        # NOTE: files uploads can't be AJAX unless they use
+        # the browser File API, which isn't supported in old
+        # browsers; we don't handle that here, and needs to
+        # be addressed in the derived class
+        #
         if hasattr(request, 'FILES') and request.FILES:
-            form = form_class(request.POST, request.FILES, **form_attrs)
+            form = form_data['form_class'](request.POST, request.FILES, **form_attrs)
         else:
-            form = form_class(request.POST, **form_attrs)
+            form = form_data['form_class'](request.POST, **form_attrs)
 
         # fill in form type if specified, as a convenience
-        if isinstance(form_data, dict) and 'form_type' in form_data:
+        if 'form_type' in form_data:
             form.form_type = form_data['form_type']
 
         rv = self.prepare_form(form, form_alias)
         if isinstance(rv, self.response_base_class):
             return rv
         
+        # we may have explicitly flagged all submissions to be
+        # treated as partial validation
+        if self.always_partially_validate and not self.is_partial_validation:
+            last_field = form.fields.keys()[-1]
+            self._partial_validation_last_field = '%s-%s' % (form.prefix, last_field) if form.prefix is not None else last_field
+            if settings.DEBUG:
+                print 'AJAX FORM POST: forcing partial validation, ending with %s' % last_field
+
         if self.is_partial_validation:
             # we're only doing partial validation
             is_partially_valid = form.is_partially_valid(self._partial_validation_last_field)
@@ -1074,7 +842,11 @@ class AjaxMultiFormView(AjaxView):
             
             # whether we are valid or not, we actually go ahead 
             # and return the form error response, so that existing
-            # successfully-validated fields can be highlighted
+            # successfully-validated fields can be highlighted;
+            # this is especially important for forms which do not
+            # have submit buttons but are relying on partial
+            # validation logic to do automatic submission (which
+            # is a supported workflow)
             #
             # NOTE: if process_partial_form returns a dict, we will
             # assume these are additional parameters to give to
@@ -1100,27 +872,166 @@ class AjaxMultiFormView(AjaxView):
                     return AjaxFormErrorResponse(form, **rv)
                 else:
                     return AjaxFormErrorResponse(form)
-
+            
         # a valid form will usually require something to
         # be done with its data
         rv = self.process_form(form, form_alias)
-        
-        #**** MAKE LIKE AjaxFormView AND FALL BACK TO AjaxResponseView
+
+        # now provide the browser with some instruction as to
+        # what to do next:
+        #
+        # 1. Explicit instructions from process_form(). (A
+        #    bare string will be interpreted as a target_url.)
+        # 2. A form-specific target_url.
+        # 3. A page-wide target_url.
+        # 4. An AjaxResponseView-style response.
+        #
+        if rv is None:
+            # this means use the form default target_url
+            rv = form_data['target_url']
+            if rv is None:
+                # this means use the page-wide target_url
+                rv = self.target_url
+
+        if rv is None:
+            # no JsonResponse, no target_url string...
+            # fall back to AjaxResponseView-style
+
+            # NOTE: if a default context has been provided, it
+            # must be deep-copied prior to use in case the
+            # prepare_context() method needs to modify it. This
+            # is inefficient if it's not going to be modified.
+            if self.context is None:
+                context = {}
+            else:
+                context = copy.deepcopy(self.context)
+            initials = {}
+
+            rv = self.prepare_all_context(context, initials)
+            if isinstance(rv, self.response_base_class):
+                return rv
+
+            rv = self.prepare_response(context)
+
         if isinstance(rv, self.response_base_class):
+            # we now have a valid JSON response; stop
             return rv
+
         if isinstance(rv, basestring):
             # we could just overwrite self.target_url
             # but it's trivial to return the redirect
             # in one step...
             return AjaxRedirectResponse(rv)
 
-        # default handling is to go to the target URL
-        return AjaxRedirectResponse(target_url)
+        # we've already tested the default case (go to target_url)
+        # so if we get here, our response isn't Non, a string, or
+        # an HttpResponse; this is a serious programming error
+        raise Exception('process_form response is not a string or HttpResponse')
+
+    # prepare the context and initial form data for all forms
+    # by letting each one process separately
+    #
+    # NOTE: if any form's prepare_context method returns a
+    # response, it will short-circuit the entire view.
+    #
+    def prepare_all_context(self, context, initials):
+        for form_alias,form_data in self.resolved_form_classes.iteritems():
+            # extra check: sometimes we forget to include
+            # AjaxFormAliasMixin for forms we want to use
+            # with this view; it's not always an error if
+            # the form action is directed to a single-form
+            # view, but it can be helpful to flag these
+            if form_data['form_class'] is None:
+                raise Exception('form_class cannot be None for form_alias %s' % str(form_alias))
+            if form_alias is not None and not issubclass(form_data['form_class'], AjaxFormAliasMixin) and settings.DEBUG:
+                # this might be better served by simply adding the missing field
+                print 'WARNING: %(form_class_name)s is not a sub-class of AjaxFormAliasMixin' % { 'form_class_name': form_data['form_class'].__name__ }
+
+            initials[form_alias] = { 'form_alias': form_alias }
+            rv = self.prepare_context(context, initials[form_alias], form_alias)
+            if isinstance(rv, self.response_base_class):
+                return rv
+
+        # and the global context prep, after all the
+        # forms are done
+        rv = self.prepare_nonform_context(context)
+        if isinstance(rv, self.response_base_class):
+            return rv
+
+    # prepare the actual form objects for all forms by
+    # letting each one process separately
+    #
+    # NOTE: if any form's prepare_form method returns a
+    # response, it will short-circuit the entire view.
+    #
+    def prepare_all_forms(self, context, initials):
+        context['forms'] = OrderedDict()
+
+        for form_alias,form_data in self.resolved_form_classes.iteritems():
+            self.form_data = form_data              # in case handler needs it
+
+            # extract form/helper attributes
+            helper_attrs = form_data.get('helper_attrs', {})
+            form_attrs = form_data.get('form_attrs', {})
+            if 'prefix' not in form_attrs:
+                form_attrs['prefix'] = form_alias
+
+            # create the form object
+            # NOTE: no default for form_class
+            form = form_data['form_class'](initial = initials[form_alias], **form_attrs)
+            context['forms'][form_alias] = form
+
+            # fill in form type, if specified
+            if 'form_type' in form_data:
+                form.form_type = form_data['form_type']
+
+            # extra step: apply Crispy helper attributes
+            if hasattr(form, 'helper'):
+                for k in helper_attrs:
+                    setattr(form.helper, k, helper_attrs[k])
+
+            # allow derived classes to modify the form post-creation
+            rv = self.prepare_form(form, form_alias)
+            if isinstance(rv, self.response_base_class):
+                return rv
+
+        # special case: for convenience, if there is just one form,
+        # place it in the context
+        if self.form_class is not None:
+            context['form'] = context['forms'][None]
+
+    # internally, we want to process all of our forms as though
+    # multiples were provided; this property provides a wrapper
+    # around this choice
+    #
+    # NOTE: this result is cached, so changes made after the
+    # first reference will not be noticed.
+    #
+    @property
+    def resolved_form_classes(self):
+        if not hasattr(self, '_resolved_form_classes'):
+            if self.form_classes is not None:
+                self._resolved_form_classes = self.form_classes
+            elif self.form_class is not None:
+                # we have just one form class without an alias
+                self._resolved_form_classes = {
+                        None: {
+                            'form_class': self.form_class,
+                            'helper_attrs': self.helper_attrs,
+                            'form_attrs': self.form_attrs,
+                            'target_url': self.target_url,
+                    }}
+            else:
+                # we have neither one nor multiple; this
+                # is a configuration error
+                raise ImproperlyConfigured('Must specify either a single form class or multiple form classes')
+
+        return self._resolved_form_classes
 
     # test whether this request is trying to do partial
     # validation; use this in your overridden functions to
     # avoid accidentally terminating partial validation
-    # by returning AjaxResponse objects
+    # by returning AjaxMixedResponse objects
     @property
     def is_partial_validation(self):
         return self._partial_validation_last_field != None
@@ -1130,4 +1041,4 @@ class AjaxMultiFormView(AjaxView):
     # you can, but you should use is_partial_validation
     # instead
     _partial_validation_last_field = None
-    
+

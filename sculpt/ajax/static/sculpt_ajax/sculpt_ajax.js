@@ -1666,7 +1666,6 @@
 		},
 
 		'_live_update_submit': function (field) {
-			console.log('live submit', field);
 			var jq_field = $(field);
 
 			// clobber the timer if it's still pending

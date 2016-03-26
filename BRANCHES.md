@@ -8,6 +8,15 @@ First public release. This is why the other sculpt-* libraries were released, so
 
 ## Features
 
+### feature/refactor-multiform
+
+There are two primary views for handling forms, AjaxFormView and
+AjaxMultiFormView. There is a lot of common code between them and
+all too often changing one has meant changing the other as well.
+This seems to be a bad pattern. Refactor these into a single view
+that is capable of one or more forms, without sacrificing the easy
+single-form use case.
+
 ### feature/enhanced-validation [DONE]
 
 Build out enhanced validation methods and clean up error message
