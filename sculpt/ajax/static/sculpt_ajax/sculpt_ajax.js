@@ -1807,7 +1807,7 @@
 			});
 
 			$(document).on('click', 'a._sculpt_ajax_post', function (e) {
-				return that._click_link(e, this);
+				return that._click_link(e, this, this.href);
 			});
 		},
 
@@ -1815,7 +1815,7 @@
 		// which are not links and haven't been automatically wrapped;
 		// this does all the real work of checking for special classes
 		// and preparation stuff
-		'_click_link': function (e, obj) {
+		'_click_link': function (e, obj, href) {
 			e.preventDefault();
 
 			// we may be working on a link inside a modal,
@@ -1853,7 +1853,7 @@
 
 			// make the AJAX call, with handlers
 			this.ajax({
-				'url': obj.href,
+				'url': href,
 				'data': { 'csrfmiddlewaretoken': this.cookies.csrftoken }
 			}, success, failure, show_busy, false);
 		},
