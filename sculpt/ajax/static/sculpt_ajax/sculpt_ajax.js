@@ -1807,48 +1807,55 @@
 			});
 
 			$(document).on('click', 'a._sculpt_ajax_post', function (e) {
-				var other = this;
-				e.preventDefault();
-
-				// we may be working on a link inside a modal,
-				// which needs to close the modal before making
-				// a request that might trigger another modal
-				//**** if an error response comes back too quickly
-				// this breaks
-				if ($(other).hasClass('_sculpt_modal_dismiss'))
-					$('#sculpt_modal').modal('hide');
-
-				// check for prepare handler
-				if (other.id in that.auto_form_handlers)
-					if (typeof(that.auto_form_handlers[other.id].prepare) == 'function')
-						if (that.auto_form_handlers[other.id].prepare(other))
-							return;
-
-				// determine parameters for AJAX call; mostly nothing,
-				// unless form handlers were registered
-				var success = null;
-				var failure = null;
-				var show_busy = false;
-
-				if (other.id in that.auto_form_handlers)
-				{
-					success = that.auto_form_handlers[other.id].success;
-					failure = that.auto_form_handlers[other.id].failure;
-					show_busy = that.auto_form_handlers[other.id].show_busy;
-				}
-
-				// the link itself may be flagged to show busy,
-				// if the generating page knows it may be a slow
-				// request
-				if ($(other).hasClass('_sculpt_ajax_busy'))
-					show_busy = true;
-
-				// make the AJAX call, with handlers
-				that.ajax({
-					'url': this.href,
-					'data': { 'csrfmiddlewaretoken': that.cookies.csrftoken }
-				}, success, failure, show_busy, false);
+				return that._click_link(e, this);
 			});
+		},
+
+		// sometimes we need to process _sculpt_ajax_post on things
+		// which are not links and haven't been automatically wrapped;
+		// this does all the real work of checking for special classes
+		// and preparation stuff
+		'_click_link': function (e, obj) {
+			e.preventDefault();
+
+			// we may be working on a link inside a modal,
+			// which needs to close the modal before making
+			// a request that might trigger another modal
+			//**** if an error response comes back too quickly
+			// this breaks
+			if ($(obj).hasClass('_sculpt_modal_dismiss'))
+				$('#sculpt_modal').modal('hide');
+
+			// check for prepare handler
+			if (obj.id in this.auto_form_handlers)
+				if (typeof(this.auto_form_handlers[obj.id].prepare) == 'function')
+					if (this.auto_form_handlers[obj.id].prepare(obj))
+						return;
+
+			// determine parameters for AJAX call; mostly nothing,
+			// unless form handlers were registered
+			var success = null;
+			var failure = null;
+			var show_busy = false;
+
+			if (obj.id in this.auto_form_handlers)
+			{
+				success = this.auto_form_handlers[obj.id].success;
+				failure = this.auto_form_handlers[obj.id].failure;
+				show_busy = this.auto_form_handlers[obj.id].show_busy;
+			}
+
+			// the link itself may be flagged to show busy,
+			// if the generating page knows it may be a slow
+			// request
+			if ($(obj).hasClass('_sculpt_ajax_busy'))
+				show_busy = true;
+
+			// make the AJAX call, with handlers
+			this.ajax({
+				'url': obj.href,
+				'data': { 'csrfmiddlewaretoken': this.cookies.csrftoken }
+			}, success, failure, show_busy, false);
 		},
 
 		'_init_chosen': function (dom_node) {
