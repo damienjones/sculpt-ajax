@@ -1336,30 +1336,34 @@
 				// hash
 				queue_item.attr('data-file-hash', data.results.file.hash);
 
-				// write the file ID into the hidden field
-				var target_field = $('#'+queued_file.target_field_id)
-				if (queued_file.allow_multiple)
+				// write the file ID into the hidden field, if we
+				// have a field ID to update
+				if (queued_file.target_field_id > '')
 				{
-					var hash_list = target_field[0].value.split(',');
-					var i;
-					for (i = 0; i < hash_list.length; i++)
-						if (hash_list[i] == data.result.file.hash)
-							break;	// already there, stop
-					if (i >= hash_list.length)
+					var target_field = $('#'+queued_file.target_field_id)
+					if (queued_file.allow_multiple)
 					{
-						// not present, append it
-						hash_list.push(data.result.file.hash);
-						target_field[0].value = hash_list.join(',');
+						var hash_list = target_field[0].value.split(',');
+						var i;
+						for (i = 0; i < hash_list.length; i++)
+							if (hash_list[i] == data.result.file.hash)
+								break;	// already there, stop
+						if (i >= hash_list.length)
+						{
+							// not present, append it
+							hash_list.push(data.result.file.hash);
+							target_field[0].value = hash_list.join(',');
+						}
 					}
-				}
-				else
-				{
-					// single value only, replace it, but if the value
-					// was already filled, find that entry in the queue
-					// block and remove it
-					if (target_field[0].value > '')
-						$('#'+queued_file.queue_id+' li[data-file-hash='+target_field[0].value+']').remove();
-					target_field[0].value = data.results.file.hash;
+					else
+					{
+						// single value only, replace it, but if the value
+						// was already filled, find that entry in the queue
+						// block and remove it
+						if (target_field[0].value > '')
+							$('#'+queued_file.queue_id+' li[data-file-hash='+target_field[0].value+']').remove();
+						target_field[0].value = data.results.file.hash;
+					}
 				}
 
 				// use any custom callback provided
@@ -1753,7 +1757,7 @@
 		'_live_update_cached_success': function (success, data, status, message, jqXHR) {
 			var that = Sculpt;
 
-			if (!('_cached_result' in data))
+			if (!('_cached_result' in data) && 'results' in data)
 			{
 				// this result hasn't been cached yet
 
