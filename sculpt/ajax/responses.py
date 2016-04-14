@@ -66,8 +66,8 @@ class AjaxMixedResponse(JsonResponse):
         if 'html' in kwargs:
             html_list = kwargs['html']
             for html in html_list:
-                if 'id' not in html or 'html' not in html:
-                    raise Exception('AJAX HTML update response requested but an update is missing required id or html values')
+                if ('id' not in html and 'selector' not in html) or 'html' not in html:
+                    raise Exception('AJAX HTML update response requested but an update is missing required id/selector or html values')
                     
             kwargs['html'] = to_json(html_list)
 
@@ -82,7 +82,7 @@ class AjaxMixedResponse(JsonResponse):
 
         super(AjaxMixedResponse, self).__init__(kwargs)
 
-    # a very, very common pattern is to create a toast
+    # a very, very common pattern is to create a toast`
     # or modal response, accompanied by a batch of HTML
     # updates, but to have all of that data configured
     # in urls.py and even to have different responses
@@ -107,23 +107,21 @@ class AjaxMixedResponse(JsonResponse):
     #       duration        how long to leave the toast up
     #   updates             a list of dicts:
     #       id              the HTML ID to be updated
+    #       selector        a jQuery selector to be used instead of an ID
     #       template_name   the template to render (required if html is missing)
     #       html            fully-rendered HTML (required if template_name is missing)
     #       class_add       class(es) to add to the html_id object (optional)
     #       class_remove    class(es) to remove from the html_id object
     #       mode            HTML update mode to use
     #       display         whether to additional show or hide the object
+    #       condition       a [test,selector] condition that must be met to apply the update
     #
     # if a modal is returned, its code will be null
     #
     # As a convenience, you can disable the modal or
     # toast with an additional flag so you don't have
     # to clobber the response configuration in special
-    # circumstances; this is especially important since
-    # Django creates a view object for each request
-    # but the config data would be shared among all
-    # instances, so modifying them on the fly would
-    # require deep-copying them first.
+    # circumstances.
     #
     # Since this factory method modifies response_data,
     # it performs a deep copy internally so the original
@@ -201,7 +199,12 @@ class AjaxMixedResponse(JsonResponse):
             # we might also need to rewrite the ID of the update
             # based on attributes we receive
             if updates_attrs is not None:
-                rendered_html[i]['id'] = rendered_html[i]['id'] % updates_attrs
+                if 'id' in rendered_html[i]:
+                    rendered_html[i]['id'] = rendered_html[i]['id'] % updates_attrs
+                if 'selector' in rendered_html[i]:
+                    rendered_html[i]['selector'] = rendered_html[i]['selector'] % updates_attrs
+                if 'condition' in rendered_html[i]:
+                    rendered_html[i]['condition'][1] = rendered_html[i]['condition'][1] % updates_attrs
 
         return rendered_html
 

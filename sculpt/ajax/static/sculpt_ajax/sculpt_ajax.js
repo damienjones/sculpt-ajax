@@ -611,11 +611,25 @@
 		'update_html': function (update_list) {
 			var i;
 			var update_item;
+			var obj;
 
 			for (i = 0; i < update_list.length; i++)
 			{
 				update_item = update_list[i];
-				var obj = $('#'+update_item.id);
+				if (update_item.selector != undefined)
+					obj = $(update_item.selector);		// an actual jQuery selector was given
+				else
+					obj = $('#'+update_item.id);		// only an ID was given
+
+				// this update might be conditional;
+				// conditions are lists: [test, selector]
+				if (update_item.condition != undefined)
+				{
+					if (update_item.condition[0] == 'if_exists' && $(update_item.condition[1]).length == 0)
+						continue;
+					else if (update_item.condition[0] == 'if_not_exists' && $(update_item.condition[1]).length > 0)
+						continue;
+				}
 				
 				// append, prepend, or replace
 				if (update_item.mode == 'append')
