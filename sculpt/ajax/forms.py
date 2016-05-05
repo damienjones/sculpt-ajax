@@ -219,6 +219,30 @@ class EnhancedValidationMixin(object):
                     return False
                 
         return True        
+
+    # as a special case, sometimes we route all validation,
+    # partial or not, through the partial validation system
+    # so we don't have to duplicate code, but we still need
+    # to easily answer the question of whether all fields
+    # are valid and/or present without coding specifically
+    # to the last field in the form
+    #
+    # NOTE: don't use is_valid() alone for this. If partial
+    # validation has been done, then is_valid() will only
+    # detect if any of the fields expected to be present
+    # had errors (because missing-field errors related to
+    # those not submitted will have been squelched); if
+    # partial validation has not been done, querying
+    # is_valid() will trigger a full validation, which
+    # will answer the question but sets up unpredictable
+    # results. This method predictably answers the question.
+    #
+    def are_all_fields_valid(self):
+        return self.are_all_fields_present() and self.is_valid()
+
+    def are_all_fields_present(self):
+        last_field = self.fields.keys()[-1]
+        return self._partial_validation_field_set is None or last_field in self._partial_validation_field_set
     
     # Django's normal form validation pattern only places
     # field values in cleaned_data if they pass single-field
