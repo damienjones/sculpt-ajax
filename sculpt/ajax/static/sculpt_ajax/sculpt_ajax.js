@@ -629,6 +629,10 @@
 						continue;
 					else if (update_item.condition[0] == 'if_not_exists' && $(update_item.condition[1]).length > 0)
 						continue;
+					else if (update_item.condition[0] == 'if_has_class' && obj.hasClass(update_item.condition[1]))
+						continue;
+					else if (update_item.condition[0] == 'if_not_has_class' && !(obj.hasClass(update_item.condition[1])))
+						continue;
 				}
 				
 				// append, prepend, or replace
@@ -649,8 +653,12 @@
 				}
 				else if (update_item.mode == 'dismiss')
 				{
-					obj.modal('hide');
-					continue;				// no class updates on dismissed modal
+					// could dismiss one of several things
+					if (obj.hasClass('modal'))
+						obj.modal('hide');
+					else if (obj.hasClass('dropdown') && obj.parent().hasClass('open'))	// dropdowns don't offer explicit close, only dismiss if open
+						obj.dropdown('toggle');
+					continue;				// no class updates on dismissed UI
 				}
 				else if (update_item.mode != 'noop')
 					obj.html(update_item.html);
